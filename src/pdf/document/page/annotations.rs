@@ -5,6 +5,7 @@ use crate::bindgen::{FPDF_ANNOTATION, FPDF_DOCUMENT, FPDF_FORMHANDLE, FPDF_PAGE}
 use crate::bindings::PdfiumLibraryBindings;
 use crate::error::{PdfiumError, PdfiumInternalError};
 use crate::pdf::color::PdfColor;
+use crate::pdf::document::page::annotation::circle::PdfPageCircleAnnotation;
 use crate::pdf::document::page::annotation::free_text::PdfPageFreeTextAnnotation;
 use crate::pdf::document::page::annotation::highlight::PdfPageHighlightAnnotation;
 use crate::pdf::document::page::annotation::ink::PdfPageInkAnnotation;
@@ -299,6 +300,20 @@ impl<'a> PdfPageAnnotations<'a> {
         self.create_annotation(
             PdfPageAnnotationType::Square,
             PdfPageSquareAnnotation::from_pdfium,
+        )
+    }
+
+    /// Creates a new [PdfPageCircleAnnotation] annotation in this [PdfPageAnnotations] collection,
+    /// returning the newly created annotation.
+    ///
+    /// If the containing `PdfPage` has a content regeneration strategy of
+    /// `PdfPageContentRegenerationStrategy::AutomaticOnEveryChange` then content regeneration
+    /// will be triggered on the page.
+    #[inline]
+    pub fn create_circle_annotation(&mut self) -> Result<PdfPageCircleAnnotation<'a>, PdfiumError> {
+        self.create_annotation(
+            PdfPageAnnotationType::Circle,
+            PdfPageCircleAnnotation::from_pdfium,
         )
     }
 
