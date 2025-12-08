@@ -17,6 +17,7 @@ pub(crate) mod internal {
     use crate::pdf::document::page::object::{
         PdfPageObject, PdfPageObjectCommon, PdfPageObjectOwnership, PdfPageObjectType,
     };
+    use crate::pdf::document::page::objects::common::{PdfPageObjectIndex, PdfPageObjectsCommon};
     use crate::pdf::document::page::objects::private::internal::PdfPageObjectsPrivate;
     use crate::pdf::document::page::objects::PdfPageObjects;
     use crate::pdf::document::page::{
@@ -72,7 +73,7 @@ pub(crate) mod internal {
             self.regenerate_content_after_mutation()
         }
 
-        #[cfg(any(feature = "pdfium_future", feature = "pdfium_7350"))]
+        #[cfg(any(feature = "pdfium_future", feature = "pdfium_7543", feature = "pdfium_7350"))]
         /// Adds this [PdfPageObject] to the given [PdfPageObjects] collection, inserting
         /// it into the existing collection at the given positional index.
         #[inline]
@@ -98,7 +99,7 @@ pub(crate) mod internal {
             }
         }
 
-        #[cfg(any(feature = "pdfium_future", feature = "pdfium_7350"))]
+        #[cfg(any(feature = "pdfium_future", feature = "pdfium_7543", feature = "pdfium_7350"))]
         fn insert_object_on_page_handle(
             &mut self,
             document_handle: FPDF_DOCUMENT,

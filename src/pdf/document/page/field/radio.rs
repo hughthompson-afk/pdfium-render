@@ -76,14 +76,46 @@ impl<'a> PdfFormRadioButtonField<'a> {
         // its selected appearance by setting a custom appearance stream; this appearance stream
         // value will then become the group value. Pdfium's FPDFAnnot_IsChecked()
         // function doesn't check for this; so if FPDFAnnot_IsChecked() comes back with
-        // anything other than Ok(true), we also check the appearance stream.
+        // anything other than Ok(true), we also check against the export value.
+
+        // Get the export value for this radio button (its unique identifier within the group)
+        let export_value = self.export_value_impl();
+
+        // Helper to check if the group value matches this radio button's value
+        let matches_this_button = |group_val: &str| -> bool {
+            let normalized_group = group_val.trim_start_matches('/');
+            
+            // "Off" means no button in the group is selected - never a match
+            if normalized_group.eq_ignore_ascii_case("off") {
+                return false;
+            }
+
+            // First try to match against export value
+            if let Some(ref export_val) = export_value {
+                let normalized_export = export_val.trim_start_matches('/');
+                if normalized_group == normalized_export {
+                    return true;
+                }
+            }
+
+            // Fall back to checking appearance stream
+            if let Some(ref ap) = self.appearance_stream_impl() {
+                let normalized_ap = ap.trim_start_matches('/');
+                return normalized_group == normalized_ap;
+            }
+
+            false
+        };
 
         match self.is_checked_impl() {
             Ok(true) => Ok(true),
-            Ok(false) => Ok(self.group_value() == self.appearance_stream_impl()),
+            Ok(false) => match self.group_value() {
+                Some(group_val) => Ok(matches_this_button(&group_val)),
+                None => Ok(false),
+            },
             Err(err) => match self.group_value() {
                 None => Err(err),
-                group_value => Ok(group_value == self.appearance_stream_impl()),
+                Some(group_val) => Ok(matches_this_button(&group_val)),
             },
         }
     }
@@ -91,13 +123,35 @@ impl<'a> PdfFormRadioButtonField<'a> {
     /// Selects the radio button of this [PdfFormRadioButtonField] object.
     #[inline]
     pub fn set_checked(&mut self) -> Result<(), PdfiumError> {
-        println!("*** [radio] set_checked()");
-        println!("??? ap: {:#?}", self.appearance_stream_impl());
+        // Get this radio button's export value - this is its unique identifier within the group.
+        // Try export_value first, then appearance stream, then use index as last resort.
+        let export_value = self
+            .export_value_impl()
+            .or_else(|| self.appearance_stream_impl())
+            .or_else(|| {
+                // Last resort: use the index in group as the value
+                // Many PDFs use numeric values like "1", "2", etc.
+                let idx = self.index_in_group();
+                if idx > 0 {
+                    Some(format!("{}", idx))
+                } else {
+                    Some("Yes".to_string()) // Ultimate fallback
+                }
+            })
+            .ok_or(PdfiumError::FormFieldAppearanceStreamUndefined)?;
 
-        match self.appearance_stream_impl() {
-            Some(appearance_stream) => self.set_value_impl(appearance_stream.as_str()),
-            None => Err(PdfiumError::FormFieldAppearanceStreamUndefined),
-        }
+        // Normalize the value (ensure consistent format)
+        let normalized_value = export_value.trim_start_matches('/');
+        let value_with_slash = format!("/{}", normalized_value);
+
+        // Set AS to select which visual appearance from the AP dictionary to display.
+        // The appearance streams already exist in the PDF - we just select which one to use.
+        self.set_string_value("AS", &value_with_slash)?;
+        
+        // Set V (value) - this is what gets saved/submitted.
+        // For radio buttons, this should ideally be set at the parent field level,
+        // but PDFium's annotation API sets it at the widget level.
+        self.set_value_impl(normalized_value)
     }
 
     /// Returns `true` if exactly one radio button in the control group containing this

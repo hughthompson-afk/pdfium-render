@@ -235,14 +235,53 @@ impl<'a> PdfPage<'a> {
 
     /// Returns the internal `FPDF_PAGE` handle for this [PdfPage].
     #[inline]
-    pub(crate) fn page_handle(&self) -> FPDF_PAGE {
+    pub fn page_handle(&self) -> FPDF_PAGE {
         self.page_handle
     }
 
     /// Returns the internal `FPDF_DOCUMENT` handle of the [PdfDocument] containing this [PdfPage].
     #[inline]
-    pub(crate) fn document_handle(&self) -> FPDF_DOCUMENT {
+    pub fn document_handle(&self) -> FPDF_DOCUMENT {
         self.document_handle
+    }
+
+    /// Returns the internal `FPDF_FORMHANDLE` for this [PdfPage], if forms are enabled.
+    #[inline]
+    pub fn form_handle(&self) -> Option<FPDF_FORMHANDLE> {
+        self.form_handle
+    }
+
+    /// Simulates a mouse click at the specified PDF coordinates.
+    /// This properly updates form fields (radio buttons, checkboxes, etc.) through
+    /// PDFium's form fill engine, which handles parent/child field relationships,
+    /// deselects sibling radio buttons, and runs any associated JavaScript.
+    ///
+    /// Returns `true` if PDFium handled the click, `false` otherwise.
+    pub fn click_at(&self, page_x: f64, page_y: f64) -> bool {
+        if let Some(form_handle) = self.form_handle {
+            // CRITICAL: PDFium requires FORM_OnAfterLoadPage to be called before
+            // any form interaction. This initializes the form widgets for the page.
+            self.bindings.FORM_OnAfterLoadPage(self.page_handle, form_handle);
+            
+            // Simulate mouse down and up at the specified coordinates
+            let down_result = self.bindings.FORM_OnLButtonDown(
+                form_handle,
+                self.page_handle,
+                0, // no modifier keys
+                page_x,
+                page_y,
+            );
+            let up_result = self.bindings.FORM_OnLButtonUp(
+                form_handle,
+                self.page_handle,
+                0,
+                page_x,
+                page_y,
+            );
+            self.bindings.is_true(down_result) || self.bindings.is_true(up_result)
+        } else {
+            false
+        }
     }
 
     /// Returns the [PdfiumLibraryBindings] used by this [PdfPage].
