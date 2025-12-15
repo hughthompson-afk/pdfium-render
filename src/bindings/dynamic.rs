@@ -899,6 +899,21 @@ pub(crate) struct DynamicPdfiumBindings {
         unsafe extern "C" fn(subtype: FPDF_ANNOTATION_SUBTYPE) -> FPDF_BOOL,
     extern_FPDFPage_CreateAnnot:
         unsafe extern "C" fn(page: FPDF_PAGE, subtype: FPDF_ANNOTATION_SUBTYPE) -> FPDF_ANNOTATION,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFPage_CreateWidgetAnnot: unsafe extern "C" fn(
+        page: FPDF_PAGE,
+        form_handle: FPDF_FORMHANDLE,
+        field_name: *const c_char,
+        field_type: *const c_char,
+        rect: *const FS_RECTF,
+        field_flags: c_int,
+        options: *const *const FPDF_WCHAR,
+        option_count: usize,
+        max_length: c_int,
+        quadding: c_int,
+        default_appearance: *const c_char,
+        default_value: FPDF_WIDESTRING,
+    ) -> FPDF_ANNOTATION,
     extern_FPDFPage_GetAnnotCount: unsafe extern "C" fn(page: FPDF_PAGE) -> c_int,
     extern_FPDFPage_GetAnnot:
         unsafe extern "C" fn(page: FPDF_PAGE, index: c_int) -> FPDF_ANNOTATION,
@@ -966,6 +981,12 @@ pub(crate) struct DynamicPdfiumBindings {
         buffer: *mut FS_POINTF,
         length: c_ulong,
     ) -> c_ulong,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_SetVertices: unsafe extern "C" fn(
+        annot: FPDF_ANNOTATION,
+        vertices: *const FS_POINTF,
+        count: c_ulong,
+    ) -> c_ulong,
     extern_FPDFAnnot_GetInkListCount: unsafe extern "C" fn(annot: FPDF_ANNOTATION) -> c_ulong,
     extern_FPDFAnnot_GetInkListPath: unsafe extern "C" fn(
         annot: FPDF_ANNOTATION,
@@ -978,6 +999,12 @@ pub(crate) struct DynamicPdfiumBindings {
         start: *mut FS_POINTF,
         end: *mut FS_POINTF,
     ) -> FPDF_BOOL,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_SetLine: unsafe extern "C" fn(
+        annot: FPDF_ANNOTATION,
+        start: *const FS_POINTF,
+        end: *const FS_POINTF,
+    ) -> FPDF_BOOL,
     extern_FPDFAnnot_SetBorder: unsafe extern "C" fn(
         annot: FPDF_ANNOTATION,
         horizontal_radius: f32,
@@ -989,6 +1016,32 @@ pub(crate) struct DynamicPdfiumBindings {
         horizontal_radius: *mut f32,
         vertical_radius: *mut f32,
         border_width: *mut f32,
+    ) -> FPDF_BOOL,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_GetBSWidth: unsafe extern "C" fn(annot: FPDF_ANNOTATION, width: *mut f32) -> FPDF_BOOL,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_SetBSWidth: unsafe extern "C" fn(annot: FPDF_ANNOTATION, width: f32) -> FPDF_BOOL,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_GetBSStyle: unsafe extern "C" fn(
+        annot: FPDF_ANNOTATION,
+        buffer: *mut c_char,
+        buflen: c_ulong,
+    ) -> c_ulong,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_SetBSStyle: unsafe extern "C" fn(annot: FPDF_ANNOTATION, style: *const c_char) -> FPDF_BOOL,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_GetBSDash: unsafe extern "C" fn(
+        annot: FPDF_ANNOTATION,
+        dash: *mut f32,
+        gap: *mut f32,
+        phase: *mut f32,
+    ) -> FPDF_BOOL,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_SetBSDash: unsafe extern "C" fn(
+        annot: FPDF_ANNOTATION,
+        dash: f32,
+        gap: f32,
+        phase: f32,
     ) -> FPDF_BOOL,
     extern_FPDFAnnot_GetFormAdditionalActionJavaScript: unsafe extern "C" fn(
         hHandle: FPDF_FORMHANDLE,
@@ -1176,6 +1229,127 @@ pub(crate) struct DynamicPdfiumBindings {
     ))]
     extern_FPDFAnnot_AddFileAttachment:
         unsafe extern "C" fn(annot: FPDF_ANNOTATION, name: FPDF_WIDESTRING) -> FPDF_ATTACHMENT,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDF_EnsureAcroForm: unsafe extern "C" fn(document: FPDF_DOCUMENT) -> FPDF_BOOL,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_SetFormFieldOptionArray: unsafe extern "C" fn(
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        options: *const *const FPDF_WCHAR,
+        count: usize,
+    ) -> FPDF_BOOL,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_SetFormFieldOptionArrayWithExportValues: unsafe extern "C" fn(
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        export_values: *const *const FPDF_WCHAR,
+        display_labels: *const *const FPDF_WCHAR,
+        count: usize,
+    ) -> FPDF_BOOL,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_SetFormFieldMaxLen: unsafe extern "C" fn(
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        max_length: c_int,
+    ) -> FPDF_BOOL,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_GetFormFieldMaxLen: unsafe extern "C" fn(
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+    ) -> c_int,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_SetFormFieldQuadding: unsafe extern "C" fn(
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        quadding: c_int,
+    ) -> FPDF_BOOL,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_GetFormFieldQuadding: unsafe extern "C" fn(
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+    ) -> c_int,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_SetFormFieldDefaultAppearance: unsafe extern "C" fn(
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        appearance: *const c_char,
+    ) -> FPDF_BOOL,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_GetFormFieldDefaultAppearance: unsafe extern "C" fn(
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        buffer: *mut c_char,
+        buflen: c_ulong,
+    ) -> c_ulong,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_SetFormFieldDefaultValue: unsafe extern "C" fn(
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        value: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_GetFormFieldDefaultValue: unsafe extern "C" fn(
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        buffer: *mut FPDF_WCHAR,
+        buflen: c_ulong,
+    ) -> c_ulong,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_SetFormFieldMKNormalCaption: unsafe extern "C" fn(
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        caption: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_SetFormFieldMKRolloverCaption: unsafe extern "C" fn(
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        caption: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_SetFormFieldMKDownCaption: unsafe extern "C" fn(
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        caption: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_SetFormFieldMKBackgroundColor: unsafe extern "C" fn(
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        color_type: c_int,
+        color: *const c_float,
+        component_count: usize,
+    ) -> FPDF_BOOL,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_SetFormFieldMKBorderColor: unsafe extern "C" fn(
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        color_type: c_int,
+        color: *const c_float,
+        component_count: usize,
+    ) -> FPDF_BOOL,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_SetFormFieldMKRotation: unsafe extern "C" fn(
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        rotation: c_int,
+    ) -> FPDF_BOOL,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_SetFormFieldMKTextPosition: unsafe extern "C" fn(
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        position: c_int,
+    ) -> FPDF_BOOL,
+    #[cfg(feature = "pdfium_future")]
+    extern_FPDFAnnot_SetFormFieldMKIconFit: unsafe extern "C" fn(
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        scale_when: c_int,
+        scale_type: c_int,
+        left_pos: c_float,
+        bottom_pos: c_float,
+        fit_bounds: FPDF_BOOL,
+    ) -> FPDF_BOOL,
     extern_FPDFDOC_InitFormFillEnvironment: unsafe extern "C" fn(
         document: FPDF_DOCUMENT,
         form_info: *mut FPDF_FORMFILLINFO,
@@ -1761,7 +1935,7 @@ pub(crate) struct DynamicPdfiumBindings {
         stroke: *mut FPDF_BOOL,
     ) -> FPDF_BOOL,
     extern_FPDFPage_InsertObject: unsafe extern "C" fn(page: FPDF_PAGE, page_obj: FPDF_PAGEOBJECT),
-    #[cfg(any(feature = "pdfium_future", feature = "pdfium_7350"))]
+    #[cfg(any(feature = "pdfium_future", feature = "pdfium_7543", feature = "pdfium_7350"))]
     extern_FPDFPage_InsertObjectAtIndex: unsafe extern "C" fn(
         page: FPDF_PAGE,
         page_object: FPDF_PAGEOBJECT,
@@ -2845,6 +3019,8 @@ impl DynamicPdfiumBindings {
                 "FPDFAnnot_IsSupportedSubtype",
             )?),
             extern_FPDFPage_CreateAnnot: *(Self::bind(&library, "FPDFPage_CreateAnnot")?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFPage_CreateWidgetAnnot: *(Self::bind(&library, "FPDFPage_CreateWidgetAnnot")?),
             extern_FPDFPage_GetAnnotCount: *(Self::bind(&library, "FPDFPage_GetAnnotCount")?),
             extern_FPDFPage_GetAnnot: *(Self::bind(&library, "FPDFPage_GetAnnot")?),
             extern_FPDFPage_GetAnnotIndex: *(Self::bind(&library, "FPDFPage_GetAnnotIndex")?),
@@ -2887,11 +3063,27 @@ impl DynamicPdfiumBindings {
             extern_FPDFAnnot_SetRect: *(Self::bind(&library, "FPDFAnnot_SetRect")?),
             extern_FPDFAnnot_GetRect: *(Self::bind(&library, "FPDFAnnot_GetRect")?),
             extern_FPDFAnnot_GetVertices: *(Self::bind(&library, "FPDFAnnot_GetVertices")?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_SetVertices: *(Self::bind(&library, "FPDFAnnot_SetVertices")?),
             extern_FPDFAnnot_GetInkListCount: *(Self::bind(&library, "FPDFAnnot_GetInkListCount")?),
             extern_FPDFAnnot_GetInkListPath: *(Self::bind(&library, "FPDFAnnot_GetInkListPath")?),
             extern_FPDFAnnot_GetLine: *(Self::bind(&library, "FPDFAnnot_GetLine")?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_SetLine: *(Self::bind(&library, "FPDFAnnot_SetLine")?),
             extern_FPDFAnnot_SetBorder: *(Self::bind(&library, "FPDFAnnot_SetBorder")?),
             extern_FPDFAnnot_GetBorder: *(Self::bind(&library, "FPDFAnnot_GetBorder")?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_GetBSWidth: *(Self::bind(&library, "FPDFAnnot_GetBSWidth")?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_SetBSWidth: *(Self::bind(&library, "FPDFAnnot_SetBSWidth")?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_GetBSStyle: *(Self::bind(&library, "FPDFAnnot_GetBSStyle")?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_SetBSStyle: *(Self::bind(&library, "FPDFAnnot_SetBSStyle")?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_GetBSDash: *(Self::bind(&library, "FPDFAnnot_GetBSDash")?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_SetBSDash: *(Self::bind(&library, "FPDFAnnot_SetBSDash")?),
             extern_FPDFAnnot_GetFormAdditionalActionJavaScript: *(Self::bind(
                 &library,
                 "FPDFAnnot_GetFormAdditionalActionJavaScript",
@@ -3024,6 +3216,92 @@ impl DynamicPdfiumBindings {
             extern_FPDFAnnot_AddFileAttachment: *(Self::bind(
                 &library,
                 "FPDFAnnot_AddFileAttachment",
+            )?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDF_EnsureAcroForm: *(Self::bind(&library, "FPDF_EnsureAcroForm")?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_SetFormFieldOptionArray: *(Self::bind(
+                &library,
+                "FPDFAnnot_SetFormFieldOptionArray",
+            )?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_SetFormFieldOptionArrayWithExportValues: *(Self::bind(
+                &library,
+                "FPDFAnnot_SetFormFieldOptionArrayWithExportValues",
+            )?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_SetFormFieldMaxLen: *(Self::bind(&library, "FPDFAnnot_SetFormFieldMaxLen")?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_GetFormFieldMaxLen: *(Self::bind(&library, "FPDFAnnot_GetFormFieldMaxLen")?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_SetFormFieldQuadding: *(Self::bind(
+                &library,
+                "FPDFAnnot_SetFormFieldQuadding",
+            )?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_GetFormFieldQuadding: *(Self::bind(
+                &library,
+                "FPDFAnnot_GetFormFieldQuadding",
+            )?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_SetFormFieldDefaultAppearance: *(Self::bind(
+                &library,
+                "FPDFAnnot_SetFormFieldDefaultAppearance",
+            )?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_GetFormFieldDefaultAppearance: *(Self::bind(
+                &library,
+                "FPDFAnnot_GetFormFieldDefaultAppearance",
+            )?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_SetFormFieldDefaultValue: *(Self::bind(
+                &library,
+                "FPDFAnnot_SetFormFieldDefaultValue",
+            )?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_GetFormFieldDefaultValue: *(Self::bind(
+                &library,
+                "FPDFAnnot_GetFormFieldDefaultValue",
+            )?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_SetFormFieldMKNormalCaption: *(Self::bind(
+                &library,
+                "FPDFAnnot_SetFormFieldMKNormalCaption",
+            )?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_SetFormFieldMKRolloverCaption: *(Self::bind(
+                &library,
+                "FPDFAnnot_SetFormFieldMKRolloverCaption",
+            )?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_SetFormFieldMKDownCaption: *(Self::bind(
+                &library,
+                "FPDFAnnot_SetFormFieldMKDownCaption",
+            )?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_SetFormFieldMKBackgroundColor: *(Self::bind(
+                &library,
+                "FPDFAnnot_SetFormFieldMKBackgroundColor",
+            )?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_SetFormFieldMKBorderColor: *(Self::bind(
+                &library,
+                "FPDFAnnot_SetFormFieldMKBorderColor",
+            )?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_SetFormFieldMKRotation: *(Self::bind(
+                &library,
+                "FPDFAnnot_SetFormFieldMKRotation",
+            )?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_SetFormFieldMKTextPosition: *(Self::bind(
+                &library,
+                "FPDFAnnot_SetFormFieldMKTextPosition",
+            )?),
+            #[cfg(feature = "pdfium_future")]
+            extern_FPDFAnnot_SetFormFieldMKIconFit: *(Self::bind(
+                &library,
+                "FPDFAnnot_SetFormFieldMKIconFit",
             )?),
             extern_FPDFDOC_InitFormFillEnvironment: *(Self::bind(
                 &library,
@@ -5496,6 +5774,42 @@ impl PdfiumLibraryBindings for DynamicPdfiumBindings {
         unsafe { (self.extern_FPDFPage_CreateAnnot)(page, subtype) }
     }
 
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFPage_CreateWidgetAnnot(
+        &self,
+        page: FPDF_PAGE,
+        form_handle: FPDF_FORMHANDLE,
+        field_name: *const c_char,
+        field_type: *const c_char,
+        rect: *const FS_RECTF,
+        field_flags: c_int,
+        options: *const *const FPDF_WCHAR,
+        option_count: usize,
+        max_length: c_int,
+        quadding: c_int,
+        default_appearance: *const c_char,
+        default_value: FPDF_WIDESTRING,
+    ) -> FPDF_ANNOTATION {
+        unsafe {
+            (self.extern_FPDFPage_CreateWidgetAnnot)(
+                page,
+                form_handle,
+                field_name,
+                field_type,
+                rect,
+                field_flags,
+                options,
+                option_count,
+                max_length,
+                quadding,
+                default_appearance,
+                default_value,
+            )
+        }
+    }
+
     #[inline]
     #[allow(non_snake_case)]
     fn FPDFPage_GetAnnotCount(&self, page: FPDF_PAGE) -> c_int {
@@ -5680,6 +5994,18 @@ impl PdfiumLibraryBindings for DynamicPdfiumBindings {
         unsafe { (self.extern_FPDFAnnot_GetVertices)(annot, buffer, length) }
     }
 
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetVertices(
+        &self,
+        annot: FPDF_ANNOTATION,
+        vertices: *const FS_POINTF,
+        count: c_ulong,
+    ) -> c_ulong {
+        unsafe { (self.extern_FPDFAnnot_SetVertices)(annot, vertices, count) }
+    }
+
     #[inline]
     #[allow(non_snake_case)]
     fn FPDFAnnot_GetInkListCount(&self, annot: FPDF_ANNOTATION) -> c_ulong {
@@ -5707,6 +6033,18 @@ impl PdfiumLibraryBindings for DynamicPdfiumBindings {
         end: *mut FS_POINTF,
     ) -> FPDF_BOOL {
         unsafe { (self.extern_FPDFAnnot_GetLine)(annot, start, end) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetLine(
+        &self,
+        annot: FPDF_ANNOTATION,
+        start: *const FS_POINTF,
+        end: *const FS_POINTF,
+    ) -> FPDF_BOOL {
+        unsafe { (self.extern_FPDFAnnot_SetLine)(annot, start, end) }
     }
 
     #[inline]
@@ -5745,6 +6083,65 @@ impl PdfiumLibraryBindings for DynamicPdfiumBindings {
                 border_width,
             )
         }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetBSWidth(&self, annot: FPDF_ANNOTATION, width: *mut c_float) -> FPDF_BOOL {
+        unsafe { (self.extern_FPDFAnnot_GetBSWidth)(annot, width) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetBSWidth(&self, annot: FPDF_ANNOTATION, width: c_float) -> FPDF_BOOL {
+        unsafe { (self.extern_FPDFAnnot_SetBSWidth)(annot, width) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetBSStyle(
+        &self,
+        annot: FPDF_ANNOTATION,
+        buffer: *mut c_char,
+        buflen: c_ulong,
+    ) -> c_ulong {
+        unsafe { (self.extern_FPDFAnnot_GetBSStyle)(annot, buffer, buflen) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetBSStyle(&self, annot: FPDF_ANNOTATION, style: *const c_char) -> FPDF_BOOL {
+        unsafe { (self.extern_FPDFAnnot_SetBSStyle)(annot, style) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetBSDash(
+        &self,
+        annot: FPDF_ANNOTATION,
+        dash: *mut c_float,
+        gap: *mut c_float,
+        phase: *mut c_float,
+    ) -> FPDF_BOOL {
+        unsafe { (self.extern_FPDFAnnot_GetBSDash)(annot, dash, gap, phase) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetBSDash(
+        &self,
+        annot: FPDF_ANNOTATION,
+        dash: c_float,
+        gap: c_float,
+        phase: c_float,
+    ) -> FPDF_BOOL {
+        unsafe { (self.extern_FPDFAnnot_SetBSDash)(annot, dash, gap, phase) }
     }
 
     #[inline]
@@ -6141,6 +6538,260 @@ impl PdfiumLibraryBindings for DynamicPdfiumBindings {
         name: FPDF_WIDESTRING,
     ) -> FPDF_ATTACHMENT {
         unsafe { (self.extern_FPDFAnnot_AddFileAttachment)(annot, name) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDF_EnsureAcroForm(&self, document: FPDF_DOCUMENT) -> FPDF_BOOL {
+        unsafe { (self.extern_FPDF_EnsureAcroForm)(document) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldOptionArray(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        options: *const *const FPDF_WCHAR,
+        count: usize,
+    ) -> FPDF_BOOL {
+        unsafe { (self.extern_FPDFAnnot_SetFormFieldOptionArray)(form, annot, options, count) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldOptionArrayWithExportValues(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        export_values: *const *const FPDF_WCHAR,
+        display_labels: *const *const FPDF_WCHAR,
+        count: usize,
+    ) -> FPDF_BOOL {
+        unsafe {
+            (self.extern_FPDFAnnot_SetFormFieldOptionArrayWithExportValues)(
+                form, annot, export_values, display_labels, count,
+            )
+        }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMaxLen(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        max_length: c_int,
+    ) -> FPDF_BOOL {
+        unsafe { (self.extern_FPDFAnnot_SetFormFieldMaxLen)(form, annot, max_length) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetFormFieldMaxLen(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+    ) -> c_int {
+        unsafe { (self.extern_FPDFAnnot_GetFormFieldMaxLen)(form, annot) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldQuadding(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        quadding: c_int,
+    ) -> FPDF_BOOL {
+        unsafe { (self.extern_FPDFAnnot_SetFormFieldQuadding)(form, annot, quadding) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetFormFieldQuadding(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+    ) -> c_int {
+        unsafe { (self.extern_FPDFAnnot_GetFormFieldQuadding)(form, annot) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldDefaultAppearance(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        appearance: *const c_char,
+    ) -> FPDF_BOOL {
+        unsafe {
+            (self.extern_FPDFAnnot_SetFormFieldDefaultAppearance)(form, annot, appearance)
+        }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetFormFieldDefaultAppearance(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        buffer: *mut c_char,
+        buflen: c_ulong,
+    ) -> c_ulong {
+        unsafe {
+            (self.extern_FPDFAnnot_GetFormFieldDefaultAppearance)(form, annot, buffer, buflen)
+        }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldDefaultValue(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        value: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL {
+        unsafe { (self.extern_FPDFAnnot_SetFormFieldDefaultValue)(form, annot, value) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetFormFieldDefaultValue(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        buffer: *mut FPDF_WCHAR,
+        buflen: c_ulong,
+    ) -> c_ulong {
+        unsafe { (self.extern_FPDFAnnot_GetFormFieldDefaultValue)(form, annot, buffer, buflen) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKNormalCaption(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        caption: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL {
+        unsafe { (self.extern_FPDFAnnot_SetFormFieldMKNormalCaption)(form, annot, caption) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKRolloverCaption(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        caption: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL {
+        unsafe { (self.extern_FPDFAnnot_SetFormFieldMKRolloverCaption)(form, annot, caption) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKDownCaption(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        caption: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL {
+        unsafe { (self.extern_FPDFAnnot_SetFormFieldMKDownCaption)(form, annot, caption) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKBackgroundColor(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        color_type: c_int,
+        color: *const c_float,
+        component_count: usize,
+    ) -> FPDF_BOOL {
+        unsafe {
+            (self.extern_FPDFAnnot_SetFormFieldMKBackgroundColor)(
+                form, annot, color_type, color, component_count,
+            )
+        }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKBorderColor(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        color_type: c_int,
+        color: *const c_float,
+        component_count: usize,
+    ) -> FPDF_BOOL {
+        unsafe {
+            (self.extern_FPDFAnnot_SetFormFieldMKBorderColor)(
+                form, annot, color_type, color, component_count,
+            )
+        }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKRotation(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        rotation: c_int,
+    ) -> FPDF_BOOL {
+        unsafe { (self.extern_FPDFAnnot_SetFormFieldMKRotation)(form, annot, rotation) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKTextPosition(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        position: c_int,
+    ) -> FPDF_BOOL {
+        unsafe { (self.extern_FPDFAnnot_SetFormFieldMKTextPosition)(form, annot, position) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKIconFit(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        scale_when: c_int,
+        scale_type: c_int,
+        left_pos: c_float,
+        bottom_pos: c_float,
+        fit_bounds: FPDF_BOOL,
+    ) -> FPDF_BOOL {
+        unsafe {
+            (self.extern_FPDFAnnot_SetFormFieldMKIconFit)(
+                form, annot, scale_when, scale_type, left_pos, bottom_pos, fit_bounds,
+            )
+        }
     }
 
     #[inline]

@@ -102,6 +102,10 @@ image_api = [] # A feature shared by all image versions, indicating that image-b
 pdfium_latest = ["pdfium_7543"]
 pdfium_future = [
     # For testing changes in Pdfium source control that are yet to be released.
+    # Note: When using pdfium_future, you must build with --no-default-features
+    # to avoid conflicts with pdfium_latest. To get maximum functionality, use:
+    # cargo build --features pdfium_future,thread_safe,image,bindings --no-default-features
+    # Or in your Cargo.toml: pdfium-render = { path = ".", features = ["pdfium_future", "thread_safe", "image", "bindings"], default-features = false }
     "pdfium_use_skia",
     "pdfium_enable_xfa",
     "pdfium_enable_v8",

@@ -3492,6 +3492,46 @@ pub trait PdfiumLibraryBindings {
         subtype: FPDF_ANNOTATION_SUBTYPE,
     ) -> FPDF_ANNOTATION;
 
+    /// Create a widget annotation (form field annotation) in `page`.
+    /// This creates both the form field dictionary and the widget annotation,
+    /// properly linking them together.
+    ///
+    ///   `page`        - Handle to the page.
+    ///   `form_handle` - Handle to the form fill module (required).
+    ///   `field_name`  - The field name (/T key), encoded in UTF-8.
+    ///   `field_type`  - The field type (/FT key): "Tx" (text), "Btn" (button),
+    ///                   "Ch" (choice), or "Sig" (signature).
+    ///   `rect`        - Bounding rectangle for the widget annotation.
+    ///   `field_flags` - The /Ff (field flags) value. Use to specify button subtypes
+    ///                   (checkbox/radio/push button), choice subtypes (combo/list),
+    ///                   and other field attributes. Use 0 for default behavior.
+    ///   `options`     - Array of option strings for choice fields (NULL to skip).
+    ///   `option_count` - Number of options (0 if options is NULL).
+    ///   `max_length`  - Maximum length for text fields (-1 to skip).
+    ///   `quadding`    - Text alignment: 0=left, 1=center, 2=right (-1 to skip).
+    ///   `default_appearance` - Default appearance string, e.g. "/Helv 12 Tf 0 0 0 rg" (NULL to skip).
+    ///   `default_value` - Default value string, UTF-16LE encoded (NULL to skip).
+    ///
+    /// Returns a handle to the created widget annotation, or NULL on failure.
+    /// Must call [PdfiumLibraryBindings::FPDFPage_CloseAnnot] when done.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFPage_CreateWidgetAnnot(
+        &self,
+        page: FPDF_PAGE,
+        form_handle: FPDF_FORMHANDLE,
+        field_name: *const c_char,
+        field_type: *const c_char,
+        rect: *const FS_RECTF,
+        field_flags: c_int,
+        options: *const *const FPDF_WCHAR,
+        option_count: usize,
+        max_length: c_int,
+        quadding: c_int,
+        default_appearance: *const c_char,
+        default_value: FPDF_WIDESTRING,
+    ) -> FPDF_ANNOTATION;
+
     /// Gets the number of annotations in `page`.
     ///
     ///   `page`   - handle to a page.
@@ -3820,6 +3860,29 @@ pub trait PdfiumLibraryBindings {
         length: c_ulong,
     ) -> c_ulong;
 
+    /// Sets the vertices of a polyline or polygon annotation.
+    ///
+    /// Sets the `/Vertices` dictionary entry to `[v0.x, v0.y, v1.x, v1.y, ...]`.
+    ///
+    ///   `annot`    - handle to an annotation.
+    ///
+    ///   `vertices` - array of points (must not be NULL).
+    ///
+    ///   `count`    - number of points in the array (must be > 0).
+    ///
+    /// Returns the number of points set if successful, 0 otherwise.
+    ///
+    /// **Note:** This function only updates the dictionary entry. The appearance stream (`/AP`)
+    /// is not automatically updated. You must rebuild it separately if needed.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetVertices(
+        &self,
+        annot: FPDF_ANNOTATION,
+        vertices: *const FS_POINTF,
+        count: c_ulong,
+    ) -> c_ulong;
+
     /// Gets the number of paths in the ink list of an ink annotation.
     ///
     ///   `annot`  - handle to an annotation, as returned by e.g. [PdfiumLibraryBindings::FPDFPage_GetAnnot]
@@ -3869,6 +3932,29 @@ pub trait PdfiumLibraryBindings {
         end: *mut FS_POINTF,
     ) -> FPDF_BOOL;
 
+    /// Sets the starting and ending coordinates of a line annotation.
+    ///
+    /// Sets the `/L` dictionary entry to `[start.x, start.y, end.x, end.y]`.
+    ///
+    ///   `annot` - handle to an annotation.
+    ///
+    ///   `start` - starting point (must not be NULL).
+    ///
+    ///   `end`   - ending point (must not be NULL).
+    ///
+    /// Returns `true` if successful.
+    ///
+    /// **Note:** This function only updates the dictionary entry. The appearance stream (`/AP`)
+    /// is not automatically updated. You must rebuild it separately if needed.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetLine(
+        &self,
+        annot: FPDF_ANNOTATION,
+        start: *const FS_POINTF,
+        end: *const FS_POINTF,
+    ) -> FPDF_BOOL;
+
     /// Sets the characteristics of the annotation's border (rounded rectangle).
     ///
     ///   `annot`              - handle to an annotation.
@@ -3910,6 +3996,99 @@ pub trait PdfiumLibraryBindings {
         horizontal_radius: *mut c_float,
         vertical_radius: *mut c_float,
         border_width: *mut c_float,
+    ) -> FPDF_BOOL;
+
+    /// Gets the border width from /BS/W.
+    ///
+    ///   `annot` - handle to an annotation.
+    ///
+    ///   `width` - pointer to receive the border width value.
+    ///
+    /// Returns `true` if `width` is not `NULL` and the border width was successfully retrieved.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetBSWidth(&self, annot: FPDF_ANNOTATION, width: *mut c_float) -> FPDF_BOOL;
+
+    /// Sets the border width in /BS/W.
+    ///
+    ///   `annot` - handle to an annotation.
+    ///
+    ///   `width` - border width value (must be >= 0.0).
+    ///
+    /// Returns `true` if setting the border width succeeds.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetBSWidth(&self, annot: FPDF_ANNOTATION, width: c_float) -> FPDF_BOOL;
+
+    /// Gets the border style from /BS/S.
+    ///
+    ///   `annot`  - handle to an annotation.
+    ///
+    ///   `buffer` - buffer to receive the style string (e.g., "S", "D", "B", "I", "U").
+    ///
+    ///   `buflen` - size of the buffer.
+    ///
+    /// Returns the length of the style string (including null terminator) if successful, 0 otherwise.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetBSStyle(
+        &self,
+        annot: FPDF_ANNOTATION,
+        buffer: *mut c_char,
+        buflen: c_ulong,
+    ) -> c_ulong;
+
+    /// Sets the border style in /BS/S.
+    ///
+    ///   `annot` - handle to an annotation.
+    ///
+    ///   `style` - border style string (e.g., "S" for solid, "D" for dashed, "B" for beveled, "I" for inset, "U" for underline).
+    ///
+    /// Returns `true` if setting the border style succeeds.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetBSStyle(&self, annot: FPDF_ANNOTATION, style: *const c_char) -> FPDF_BOOL;
+
+    /// Gets the dash pattern from /BS/D.
+    ///
+    ///   `annot` - handle to an annotation.
+    ///
+    ///   `dash`  - pointer to receive the dash length value.
+    ///
+    ///   `gap`   - pointer to receive the gap length value.
+    ///
+    ///   `phase` - pointer to receive the phase value.
+    ///
+    /// Returns `true` if `dash`, `gap`, and `phase` are not `NULL` and the dash pattern was successfully retrieved.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetBSDash(
+        &self,
+        annot: FPDF_ANNOTATION,
+        dash: *mut c_float,
+        gap: *mut c_float,
+        phase: *mut c_float,
+    ) -> FPDF_BOOL;
+
+    /// Sets the dash pattern in /BS/D.
+    ///
+    ///   `annot` - handle to an annotation.
+    ///
+    ///   `dash`  - dash length value (must be >= 0.0).
+    ///
+    ///   `gap`   - gap length value (must be >= 0.0).
+    ///
+    ///   `phase` - phase value (must be >= 0.0).
+    ///
+    /// Returns `true` if setting the dash pattern succeeds.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetBSDash(
+        &self,
+        annot: FPDF_ANNOTATION,
+        dash: c_float,
+        gap: c_float,
+        phase: c_float,
     ) -> FPDF_BOOL;
 
     /// Get the JavaScript of an event of the annotation's additional actions.
@@ -4595,6 +4774,317 @@ pub trait PdfiumLibraryBindings {
         buflen: c_ulong,
     ) -> c_ulong;
 
+    /// Sets the options array for a choice field (combo box or list box).
+    /// Simple options where display value equals export value.
+    ///
+    ///   `form`        - handle to the form fill module.
+    ///   `annot`       - handle to an annotation.
+    ///   `options`     - array of option label strings (UTF-16LE encoded).
+    ///   `count`       - number of options.
+    ///
+    /// Returns `true` on success, `false` on failure.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldOptionArray(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        options: *const *const FPDF_WCHAR,
+        count: usize,
+    ) -> FPDF_BOOL;
+
+    /// Sets the options array for a choice field with separate export values.
+    ///
+    ///   `form`          - handle to the form fill module.
+    ///   `annot`         - handle to an annotation.
+    ///   `export_values` - array of export value strings (UTF-16LE encoded).
+    ///   `display_labels` - array of display label strings (UTF-16LE encoded).
+    ///   `count`         - number of options.
+    ///
+    /// Returns `true` on success, `false` on failure.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldOptionArrayWithExportValues(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        export_values: *const *const FPDF_WCHAR,
+        display_labels: *const *const FPDF_WCHAR,
+        count: usize,
+    ) -> FPDF_BOOL;
+
+    /// Sets the maximum length for a text field.
+    ///
+    ///   `form`        - handle to the form fill module.
+    ///   `annot`       - handle to an annotation.
+    ///   `max_length`  - maximum length (0 = unlimited, -1 = error).
+    ///
+    /// Returns `true` on success, `false` on failure.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMaxLen(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        max_length: c_int,
+    ) -> FPDF_BOOL;
+
+    /// Gets the maximum length for a text field.
+    ///
+    ///   `form`        - handle to the form fill module.
+    ///   `annot`       - handle to an annotation.
+    ///
+    /// Returns the maximum length, or -1 on error.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetFormFieldMaxLen(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+    ) -> c_int;
+
+    /// Sets the text alignment (quadding) for a text field.
+    ///
+    ///   `form`        - handle to the form fill module.
+    ///   `annot`       - handle to an annotation.
+    ///   `quadding`    - alignment: 0=left, 1=center, 2=right.
+    ///
+    /// Returns `true` on success, `false` on failure.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldQuadding(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        quadding: c_int,
+    ) -> FPDF_BOOL;
+
+    /// Gets the text alignment (quadding) for a text field.
+    ///
+    ///   `form`        - handle to the form fill module.
+    ///   `annot`       - handle to an annotation.
+    ///
+    /// Returns the quadding value (0=left, 1=center, 2=right), or -1 on error.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetFormFieldQuadding(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+    ) -> c_int;
+
+    /// Sets the default appearance string for a form field.
+    ///
+    ///   `form`        - handle to the form fill module.
+    ///   `annot`       - handle to an annotation.
+    ///   `appearance`  - appearance string, e.g. "/Helv 12 Tf 0 0 0 rg" (UTF-8).
+    ///
+    /// Returns `true` on success, `false` on failure.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldDefaultAppearance(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        appearance: *const c_char,
+    ) -> FPDF_BOOL;
+
+    /// Gets the default appearance string for a form field.
+    ///
+    ///   `form`        - handle to the form fill module.
+    ///   `annot`       - handle to an annotation.
+    ///   `buffer`      - buffer for holding the appearance string (UTF-8).
+    ///   `buflen`      - length of the buffer in bytes.
+    ///
+    /// Returns the length of the string in bytes, or 0 on error.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetFormFieldDefaultAppearance(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        buffer: *mut c_char,
+        buflen: c_ulong,
+    ) -> c_ulong;
+
+    /// Sets the default value for a form field.
+    ///
+    ///   `form`        - handle to the form fill module.
+    ///   `annot`       - handle to an annotation.
+    ///   `value`       - default value string (UTF-16LE encoded).
+    ///
+    /// Returns `true` on success, `false` on failure.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldDefaultValue(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        value: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL;
+
+    /// Gets the default value for a form field.
+    ///
+    ///   `form`        - handle to the form fill module.
+    ///   `annot`       - handle to an annotation.
+    ///   `buffer`      - buffer for holding the value string (UTF-16LE encoded).
+    ///   `buflen`      - length of the buffer in bytes.
+    ///
+    /// Returns the length of the string in bytes, or 0 on error.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetFormFieldDefaultValue(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        buffer: *mut FPDF_WCHAR,
+        buflen: c_ulong,
+    ) -> c_ulong;
+
+    /// Sets the normal caption for a button field (MK dictionary).
+    ///
+    ///   `form`        - handle to the form fill module.
+    ///   `annot`       - handle to an annotation.
+    ///   `caption`     - caption string (UTF-16LE encoded).
+    ///
+    /// Returns `true` on success, `false` on failure.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKNormalCaption(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        caption: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL;
+
+    /// Sets the rollover caption for a button field (MK dictionary).
+    ///
+    ///   `form`        - handle to the form fill module.
+    ///   `annot`       - handle to an annotation.
+    ///   `caption`     - caption string (UTF-16LE encoded).
+    ///
+    /// Returns `true` on success, `false` on failure.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKRolloverCaption(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        caption: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL;
+
+    /// Sets the down caption for a button field (MK dictionary).
+    ///
+    ///   `form`        - handle to the form fill module.
+    ///   `annot`       - handle to an annotation.
+    ///   `caption`     - caption string (UTF-16LE encoded).
+    ///
+    /// Returns `true` on success, `false` on failure.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKDownCaption(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        caption: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL;
+
+    /// Sets the background color for a button field (MK dictionary).
+    ///
+    ///   `form`        - handle to the form fill module.
+    ///   `annot`       - handle to an annotation.
+    ///   `color_type`  - 0=transparent, 1=Gray, 3=RGB, 4=CMYK.
+    ///   `color`       - color component array.
+    ///   `component_count` - number of color components.
+    ///
+    /// Returns `true` on success, `false` on failure.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKBackgroundColor(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        color_type: c_int,
+        color: *const c_float,
+        component_count: usize,
+    ) -> FPDF_BOOL;
+
+    /// Sets the border color for a button field (MK dictionary).
+    ///
+    ///   `form`        - handle to the form fill module.
+    ///   `annot`       - handle to an annotation.
+    ///   `color_type`  - 0=transparent, 1=Gray, 3=RGB, 4=CMYK.
+    ///   `color`       - color component array.
+    ///   `component_count` - number of color components.
+    ///
+    /// Returns `true` on success, `false` on failure.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKBorderColor(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        color_type: c_int,
+        color: *const c_float,
+        component_count: usize,
+    ) -> FPDF_BOOL;
+
+    /// Sets the rotation for a button field (MK dictionary).
+    ///
+    ///   `form`        - handle to the form fill module.
+    ///   `annot`       - handle to an annotation.
+    ///   `rotation`    - rotation in degrees: 0, 90, 180, or 270.
+    ///
+    /// Returns `true` on success, `false` on failure.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKRotation(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        rotation: c_int,
+    ) -> FPDF_BOOL;
+
+    /// Sets the text position for a button field (MK dictionary).
+    ///
+    ///   `form`        - handle to the form fill module.
+    ///   `annot`       - handle to an annotation.
+    ///   `position`    - text position: 0-6 (see PDF spec).
+    ///
+    /// Returns `true` on success, `false` on failure.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKTextPosition(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        position: c_int,
+    ) -> FPDF_BOOL;
+
+    /// Sets the icon fit parameters for a button field (MK dictionary).
+    ///
+    ///   `form`        - handle to the form fill module.
+    ///   `annot`       - handle to an annotation.
+    ///   `scale_when`  - 0=always, 1=bigger, 2=smaller, 3=never.
+    ///   `scale_type`  - 0=anamorphic, 1=proportional.
+    ///   `left_pos`    - left position (0.0-1.0).
+    ///   `bottom_pos`  - bottom position (0.0-1.0).
+    ///   `fit_bounds`  - whether to fit bounds.
+    ///
+    /// Returns `true` on success, `false` on failure.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKIconFit(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        scale_when: c_int,
+        scale_type: c_int,
+        left_pos: c_float,
+        bottom_pos: c_float,
+        fit_bounds: FPDF_BOOL,
+    ) -> FPDF_BOOL;
+
     /// Add a URI action to `annot`, overwriting the existing action, if any.
     ///
     ///   `annot`  - handle to a link annotation.
@@ -4728,6 +5218,16 @@ pub trait PdfiumLibraryBindings {
     /// This function is a no-op when `form` is null.
     #[allow(non_snake_case)]
     fn FPDFDOC_ExitFormFillEnvironment(&self, form: FPDF_FORMHANDLE);
+
+    /// Ensures the document has an /AcroForm dictionary in its catalog.
+    /// Creates one if it doesn't exist.
+    ///
+    ///   `document` - Handle to the document.
+    ///
+    /// Returns `true` if AcroForm exists or was successfully created, `false` otherwise.
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDF_EnsureAcroForm(&self, document: FPDF_DOCUMENT) -> FPDF_BOOL;
 
     /// This method is required for implementing all the form related
     /// functions. Should be invoked after user successfully loaded a

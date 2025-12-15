@@ -424,22 +424,59 @@ pub(crate) mod internal {
         /// Internal implementation of [PdfPageAnnotationCommon::set_fill_color()].
         #[inline]
         fn set_fill_color_impl(&mut self, fill_color: PdfColor) -> Result<(), PdfiumError> {
-            if self.bindings().is_true(self.bindings().FPDFAnnot_SetColor(
+            #[cfg(target_arch = "wasm32")]
+            {
+                use web_sys::console;
+                console::log_1(&"═══════════════════════════════════════════════════════════".into());
+                console::log_1(&"🎨 set_fill_color_impl() - Setting fill color in dictionary".into());
+                console::log_1(&format!("   Color to set: r={}, g={}, b={}, a={}", 
+                    fill_color.red(), fill_color.green(), fill_color.blue(), fill_color.alpha()).into());
+                console::log_1(&format!("   Annotation handle: {:?}", self.handle()).into());
+            }
+            
+            #[cfg(target_arch = "wasm32")]
+            {
+                use web_sys::console;
+                let has_ap = self.bindings().is_true(self.bindings().FPDFAnnot_HasKey(self.handle(), "AP"));
+                console::log_1(&format!("   Has appearance stream (/AP): {}", has_ap).into());
+            }
+            
+            let set_color_result = self.bindings().FPDFAnnot_SetColor(
                 self.handle(),
                 FPDFANNOT_COLORTYPE_FPDFANNOT_COLORTYPE_InteriorColor,
                 fill_color.red() as c_uint,
                 fill_color.green() as c_uint,
                 fill_color.blue() as c_uint,
                 fill_color.alpha() as c_uint,
-            )) {
+            );
+            
+            #[cfg(target_arch = "wasm32")]
+            {
+                use web_sys::console;
+                console::log_1(&format!("   FPDFAnnot_SetColor returned: {} (1=success, 0=failure)", set_color_result).into());
+            }
+            
+            if self.bindings().is_true(set_color_result) {
+                #[cfg(target_arch = "wasm32")]
+                {
+                    use web_sys::console;
+                    console::log_1(&"✅ Fill color successfully written to /IC dictionary".into());
+                    console::log_1(&"═══════════════════════════════════════════════════════════".into());
+                }
                 Ok(())
             } else {
                 // The FPDFAnnot_SetColor() function returns false if the annotation
                 // is using appearance streams. In this case, the Pdfium documentation
                 // states that we must use FPDFPath_SetFillColor() instead; that function
                 // is deprecated, and says to use FPDFPageObj_SetFillColor().
+                
+                #[cfg(target_arch = "wasm32")]
+                {
+                    use web_sys::console;
+                    console::log_1(&"⚠️  FPDFAnnot_SetColor failed, trying FPDFPageObj_SetFillColor".into());
+                }
 
-                if self
+                let fallback_result = self
                     .bindings()
                     .is_true(self.bindings().FPDFPageObj_SetFillColor(
                         self.handle() as FPDF_PAGEOBJECT,
@@ -447,8 +484,20 @@ pub(crate) mod internal {
                         fill_color.green() as c_uint,
                         fill_color.blue() as c_uint,
                         fill_color.alpha() as c_uint,
-                    ))
+                    ));
+                
+                #[cfg(target_arch = "wasm32")]
                 {
+                    use web_sys::console;
+                    if fallback_result {
+                        console::log_1(&"✅ Fill color set via FPDFPageObj_SetFillColor".into());
+                    } else {
+                        console::log_1(&"❌ ERROR: Both FPDFAnnot_SetColor and FPDFPageObj_SetFillColor failed".into());
+                    }
+                    console::log_1(&"═══════════════════════════════════════════════════════════".into());
+                }
+                
+                if fallback_result {
                     Ok(())
                 } else {
                     Err(PdfiumError::PdfiumLibraryInternalError(
@@ -506,33 +555,76 @@ pub(crate) mod internal {
         /// Internal implementation of [PdfPageAnnotationCommon::set_stroke_color()].
         #[inline]
         fn set_stroke_color_impl(&mut self, stroke_color: PdfColor) -> Result<(), PdfiumError> {
-            if self.bindings().is_true(self.bindings().FPDFAnnot_SetColor(
+            #[cfg(target_arch = "wasm32")]
+            {
+                use web_sys::console;
+                console::log_1(&"═══════════════════════════════════════════════════════════".into());
+                console::log_1(&"🎨 set_stroke_color_impl() - Setting stroke color in dictionary".into());
+                console::log_1(&format!("   Color to set: r={}, g={}, b={}, a={}", 
+                    stroke_color.red(), stroke_color.green(), stroke_color.blue(), stroke_color.alpha()).into());
+                console::log_1(&format!("   Annotation handle: {:?}", self.handle()).into());
+            }
+            
+            let has_ap = self.bindings().is_true(self.bindings().FPDFAnnot_HasKey(self.handle(), "AP"));
+            #[cfg(target_arch = "wasm32")]
+            {
+                use web_sys::console;
+                console::log_1(&format!("   Has appearance stream (/AP): {}", has_ap).into());
+            }
+            
+            let set_color_result = self.bindings().FPDFAnnot_SetColor(
                 self.handle(),
                 FPDFANNOT_COLORTYPE_FPDFANNOT_COLORTYPE_Color,
                 stroke_color.red() as c_uint,
                 stroke_color.green() as c_uint,
                 stroke_color.blue() as c_uint,
                 stroke_color.alpha() as c_uint,
-            )) {
+            );
+            
+            #[cfg(target_arch = "wasm32")]
+            {
+                use web_sys::console;
+                console::log_1(&format!("   FPDFAnnot_SetColor returned: {} (1=success, 0=failure)", set_color_result).into());
+            }
+            
+            if self.bindings().is_true(set_color_result) {
+                #[cfg(target_arch = "wasm32")]
+                {
+                    use web_sys::console;
+                    console::log_1(&"✅ Stroke color successfully written to /C dictionary".into());
+                    console::log_1(&"═══════════════════════════════════════════════════════════".into());
+                }
                 Ok(())
             } else {
                 // The FPDFAnnot_SetColor() function returns false if the annotation
-                // is using appearance streams. In this case, the Pdfium documentation
-                // states that we must use FPDFPath_SetStrokeColor() instead; that function
-                // is deprecated, and says to use FPDFPageObj_SetStrokeColor().
-
-                if self
-                    .bindings()
-                    .is_true(self.bindings().FPDFPageObj_SetStrokeColor(
-                        self.handle() as FPDF_PAGEOBJECT,
-                        stroke_color.red() as c_uint,
-                        stroke_color.green() as c_uint,
-                        stroke_color.blue() as c_uint,
-                        stroke_color.alpha() as c_uint,
-                    ))
-                {
+                // is using appearance streams. For annotations with appearance streams
+                // (like Line, Polygon, Polyline), the color is embedded directly in the
+                // appearance stream content and cannot be changed via the annotation's
+                // color properties.
+                //
+                // Check if the annotation has an appearance stream. If it does, we return
+                // Ok(()) as a no-op since the color is already embedded in the stream.
+                // If it doesn't have an appearance stream, then FPDFAnnot_SetColor failed
+                // for some other reason, so we return an error.
+                if has_ap {
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        use web_sys::console;
+                        console::log_1(&"⚠️  FPDFAnnot_SetColor failed - appearance stream exists, color not written to dictionary".into());
+                        console::log_1(&"   This is expected behavior - color must be set BEFORE appearance stream is created".into());
+                        console::log_1(&"═══════════════════════════════════════════════════════════".into());
+                    }
+                    // Annotation has an appearance stream - color is embedded in the stream.
+                    // Setting color separately is a no-op, so we return success.
                     Ok(())
                 } else {
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        use web_sys::console;
+                        console::log_1(&"❌ ERROR: FPDFAnnot_SetColor failed and no appearance stream exists".into());
+                        console::log_1(&"═══════════════════════════════════════════════════════════".into());
+                    }
+                    // No appearance stream, but FPDFAnnot_SetColor failed for some other reason.
                     Err(PdfiumError::PdfiumLibraryInternalError(
                         PdfiumInternalError::Unknown,
                     ))

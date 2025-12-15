@@ -3,13 +3,11 @@
 
 use crate::bindgen::{FPDF_ANNOTATION, FPDF_FORMHANDLE};
 use crate::bindings::PdfiumLibraryBindings;
+use crate::error::PdfiumError;
 use crate::pdf::document::page::field::options::PdfFormFieldOptions;
 use crate::pdf::document::page::field::private::internal::{
     PdfFormFieldFlags, PdfFormFieldPrivate,
 };
-
-#[cfg(any(feature = "pdfium_future", feature = "pdfium_7350"))]
-use crate::error::PdfiumError;
 
 #[cfg(doc)]
 use {
@@ -59,13 +57,34 @@ impl<'a> PdfFormComboBoxField<'a> {
         &self.options
     }
 
-    /// Returns the displayed label for the currently selected option in this [PdfFormComboBoxField] object, if any.
+    /// Returns the current value of this [PdfFormComboBoxField] object, if any.
+    /// 
+    /// For editable combo boxes (where [PdfFormComboBoxField::has_editable_text_box()] returns `true`),
+    /// this returns the raw text value which may be a custom value not in the options list.
+    /// For non-editable combo boxes, this returns the label of the currently selected option.
     #[inline]
     pub fn value(&self) -> Option<String> {
-        self.options()
-            .iter()
-            .find(|option| option.is_set())
-            .and_then(|option| option.label().cloned())
+        // For editable combo boxes, use the raw value from the V entry
+        // This handles custom values that aren't in the options list
+        if self.has_editable_text_box() {
+            self.value_impl()
+        } else {
+            // For non-editable combo boxes, find the selected option
+            self.options()
+                .iter()
+                .find(|option| option.is_set())
+                .and_then(|option| option.label().cloned())
+        }
+    }
+
+    /// Sets the value of this [PdfFormComboBoxField] object.
+    ///
+    /// The value should match the label of one of the available options in this combo box.
+    /// For combo boxes with an editable text box ([PdfFormComboBoxField::has_editable_text_box()]
+    /// returns `true`), arbitrary text values may also be accepted.
+    #[inline]
+    pub fn set_value(&mut self, value: &str) -> Result<(), PdfiumError> {
+        self.set_value_impl(value)
     }
 
     /// Returns `true` if this [PdfFormComboBoxField] also includes an editable text box.

@@ -1768,6 +1768,42 @@ impl PdfiumLibraryBindings for StaticPdfiumBindings {
         unsafe { crate::bindgen::FPDFPage_CreateAnnot(page, subtype) }
     }
 
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFPage_CreateWidgetAnnot(
+        &self,
+        page: FPDF_PAGE,
+        form_handle: FPDF_FORMHANDLE,
+        field_name: *const c_char,
+        field_type: *const c_char,
+        rect: *const FS_RECTF,
+        field_flags: c_int,
+        options: *const *const FPDF_WCHAR,
+        option_count: usize,
+        max_length: c_int,
+        quadding: c_int,
+        default_appearance: *const c_char,
+        default_value: FPDF_WIDESTRING,
+    ) -> FPDF_ANNOTATION {
+        unsafe {
+            crate::bindgen::FPDFPage_CreateWidgetAnnot(
+                page,
+                form_handle,
+                field_name,
+                field_type,
+                rect,
+                field_flags,
+                options,
+                option_count,
+                max_length,
+                quadding,
+                default_appearance,
+                default_value,
+            )
+        }
+    }
+
     #[inline]
     #[allow(non_snake_case)]
     fn FPDFPage_GetAnnotCount(&self, page: FPDF_PAGE) -> c_int {
@@ -1952,6 +1988,18 @@ impl PdfiumLibraryBindings for StaticPdfiumBindings {
         unsafe { crate::bindgen::FPDFAnnot_GetVertices(annot, buffer, length) }
     }
 
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetVertices(
+        &self,
+        annot: FPDF_ANNOTATION,
+        vertices: *const FS_POINTF,
+        count: c_ulong,
+    ) -> c_ulong {
+        unsafe { crate::bindgen::FPDFAnnot_SetVertices(annot, vertices, count) }
+    }
+
     #[inline]
     #[allow(non_snake_case)]
     fn FPDFAnnot_GetInkListCount(&self, annot: FPDF_ANNOTATION) -> c_ulong {
@@ -1979,6 +2027,18 @@ impl PdfiumLibraryBindings for StaticPdfiumBindings {
         end: *mut FS_POINTF,
     ) -> FPDF_BOOL {
         unsafe { crate::bindgen::FPDFAnnot_GetLine(annot, start, end) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetLine(
+        &self,
+        annot: FPDF_ANNOTATION,
+        start: *const FS_POINTF,
+        end: *const FS_POINTF,
+    ) -> FPDF_BOOL {
+        unsafe { crate::bindgen::FPDFAnnot_SetLine(annot, start, end) }
     }
 
     #[inline]
@@ -2017,6 +2077,65 @@ impl PdfiumLibraryBindings for StaticPdfiumBindings {
                 border_width,
             )
         }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetBSWidth(&self, annot: FPDF_ANNOTATION, width: *mut c_float) -> FPDF_BOOL {
+        unsafe { crate::bindgen::FPDFAnnot_GetBSWidth(annot, width) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetBSWidth(&self, annot: FPDF_ANNOTATION, width: c_float) -> FPDF_BOOL {
+        unsafe { crate::bindgen::FPDFAnnot_SetBSWidth(annot, width) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetBSStyle(
+        &self,
+        annot: FPDF_ANNOTATION,
+        buffer: *mut c_char,
+        buflen: c_ulong,
+    ) -> c_ulong {
+        unsafe { crate::bindgen::FPDFAnnot_GetBSStyle(annot, buffer, buflen) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetBSStyle(&self, annot: FPDF_ANNOTATION, style: *const c_char) -> FPDF_BOOL {
+        unsafe { crate::bindgen::FPDFAnnot_SetBSStyle(annot, style) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetBSDash(
+        &self,
+        annot: FPDF_ANNOTATION,
+        dash: *mut c_float,
+        gap: *mut c_float,
+        phase: *mut c_float,
+    ) -> FPDF_BOOL {
+        unsafe { crate::bindgen::FPDFAnnot_GetBSDash(annot, dash, gap, phase) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetBSDash(
+        &self,
+        annot: FPDF_ANNOTATION,
+        dash: c_float,
+        gap: c_float,
+        phase: c_float,
+    ) -> FPDF_BOOL {
+        unsafe { crate::bindgen::FPDFAnnot_SetBSDash(annot, dash, gap, phase) }
     }
 
     #[inline]
@@ -2413,6 +2532,268 @@ impl PdfiumLibraryBindings for StaticPdfiumBindings {
         name: FPDF_WIDESTRING,
     ) -> FPDF_ATTACHMENT {
         unsafe { crate::bindgen::FPDFAnnot_AddFileAttachment(annot, name) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDF_EnsureAcroForm(&self, document: FPDF_DOCUMENT) -> FPDF_BOOL {
+        unsafe { crate::bindgen::FPDF_EnsureAcroForm(document) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldOptionArray(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        options: *const *const FPDF_WCHAR,
+        count: usize,
+    ) -> FPDF_BOOL {
+        unsafe {
+            crate::bindgen::FPDFAnnot_SetFormFieldOptionArray(form, annot, options, count)
+        }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldOptionArrayWithExportValues(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        export_values: *const *const FPDF_WCHAR,
+        display_labels: *const *const FPDF_WCHAR,
+        count: usize,
+    ) -> FPDF_BOOL {
+        unsafe {
+            crate::bindgen::FPDFAnnot_SetFormFieldOptionArrayWithExportValues(
+                form, annot, export_values, display_labels, count,
+            )
+        }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMaxLen(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        max_length: c_int,
+    ) -> FPDF_BOOL {
+        unsafe { crate::bindgen::FPDFAnnot_SetFormFieldMaxLen(form, annot, max_length) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetFormFieldMaxLen(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+    ) -> c_int {
+        unsafe { crate::bindgen::FPDFAnnot_GetFormFieldMaxLen(form, annot) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldQuadding(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        quadding: c_int,
+    ) -> FPDF_BOOL {
+        unsafe { crate::bindgen::FPDFAnnot_SetFormFieldQuadding(form, annot, quadding) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetFormFieldQuadding(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+    ) -> c_int {
+        unsafe { crate::bindgen::FPDFAnnot_GetFormFieldQuadding(form, annot) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldDefaultAppearance(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        appearance: *const c_char,
+    ) -> FPDF_BOOL {
+        unsafe {
+            crate::bindgen::FPDFAnnot_SetFormFieldDefaultAppearance(form, annot, appearance)
+        }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetFormFieldDefaultAppearance(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        buffer: *mut c_char,
+        buflen: c_ulong,
+    ) -> c_ulong {
+        unsafe {
+            crate::bindgen::FPDFAnnot_GetFormFieldDefaultAppearance(form, annot, buffer, buflen)
+        }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldDefaultValue(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        value: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL {
+        unsafe { crate::bindgen::FPDFAnnot_SetFormFieldDefaultValue(form, annot, value) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetFormFieldDefaultValue(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        buffer: *mut FPDF_WCHAR,
+        buflen: c_ulong,
+    ) -> c_ulong {
+        unsafe {
+            crate::bindgen::FPDFAnnot_GetFormFieldDefaultValue(form, annot, buffer, buflen)
+        }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKNormalCaption(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        caption: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL {
+        unsafe {
+            crate::bindgen::FPDFAnnot_SetFormFieldMKNormalCaption(form, annot, caption)
+        }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKRolloverCaption(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        caption: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL {
+        unsafe {
+            crate::bindgen::FPDFAnnot_SetFormFieldMKRolloverCaption(form, annot, caption)
+        }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKDownCaption(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        caption: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL {
+        unsafe { crate::bindgen::FPDFAnnot_SetFormFieldMKDownCaption(form, annot, caption) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKBackgroundColor(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        color_type: c_int,
+        color: *const c_float,
+        component_count: usize,
+    ) -> FPDF_BOOL {
+        unsafe {
+            crate::bindgen::FPDFAnnot_SetFormFieldMKBackgroundColor(
+                form, annot, color_type, color, component_count,
+            )
+        }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKBorderColor(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        color_type: c_int,
+        color: *const c_float,
+        component_count: usize,
+    ) -> FPDF_BOOL {
+        unsafe {
+            crate::bindgen::FPDFAnnot_SetFormFieldMKBorderColor(
+                form, annot, color_type, color, component_count,
+            )
+        }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKRotation(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        rotation: c_int,
+    ) -> FPDF_BOOL {
+        unsafe { crate::bindgen::FPDFAnnot_SetFormFieldMKRotation(form, annot, rotation) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKTextPosition(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        position: c_int,
+    ) -> FPDF_BOOL {
+        unsafe { crate::bindgen::FPDFAnnot_SetFormFieldMKTextPosition(form, annot, position) }
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKIconFit(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        scale_when: c_int,
+        scale_type: c_int,
+        left_pos: c_float,
+        bottom_pos: c_float,
+        fit_bounds: FPDF_BOOL,
+    ) -> FPDF_BOOL {
+        unsafe {
+            crate::bindgen::FPDFAnnot_SetFormFieldMKIconFit(
+                form, annot, scale_when, scale_type, left_pos, bottom_pos, fit_bounds,
+            )
+        }
     }
 
     #[inline]

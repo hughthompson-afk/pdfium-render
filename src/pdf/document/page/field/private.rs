@@ -149,14 +149,17 @@ pub(crate) mod internal {
             /// clicking the selected button deselects it, leaving no button selected.
             ///
             /// This flag is only applicable to radio buttons.
-            const ButtonNoToggleToOff = 1 << 15; // Not directly exposed by Pdfium, but we can support it inline.
+            /// PDF 1.7 spec Table 8.75: Bit 15 (1-indexed) = bit position 14 (0-indexed)
+            const ButtonNoToggleToOff = 1 << 14;
 
             /// If set, the field is a set of radio buttons; if clear, the field is a check box.
             /// This flag is meaningful only if the `ButtonIsPushbutton` flag is clear.
-            const ButtonIsRadio = 1 << 16; // Not directly exposed by Pdfium, but we can support it inline.
+            /// PDF 1.7 spec Table 8.75: Bit 16 (1-indexed) = bit position 15 (0-indexed)
+            const ButtonIsRadio = 1 << 15;
 
             /// If set, the field is a push button that does not retain a permanent value.
-            const ButtonIsPushButton = 1 << 17; // Not directly exposed by Pdfium, but we can support it inline.
+            /// PDF 1.7 spec Table 8.75: Bit 17 (1-indexed) = bit position 16 (0-indexed)
+            const ButtonIsPushButton = 1 << 16;
 
             /// If set, a group of radio buttons within a radio button field that
             /// use the same value for the on state will turn on and off in unison; that is if
@@ -164,7 +167,8 @@ pub(crate) mod internal {
             /// exclusive, i.e. the same behavior as HTML radio buttons.
             ///
             /// This flag was added in PDF version 1.5.
-            const ButtonIsRadiosInUnison = 1 << 26; // Not directly exposed by Pdfium, but we can support it inline.
+            /// PDF 1.7 spec Table 8.75: Bit 26 (1-indexed) = bit position 25 (0-indexed)
+            const ButtonIsRadiosInUnison = 1 << 25;
         }
     }
 

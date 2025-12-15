@@ -44,7 +44,7 @@ use js_sys::{Array, Function, Object, Reflect, Uint8Array, WebAssembly};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::convert::TryInto;
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::mem::size_of;
 use std::os::raw::{
     c_char, c_double, c_float, c_int, c_long, c_uchar, c_uint, c_ulong, c_ushort, c_void,
@@ -960,7 +960,7 @@ impl PdfiumRenderWasmState {
 
     /// Stores the given key / value pair.
     #[inline]
-    fn set(&mut self, key: &str, value: JsValue) {
+    pub(crate) fn set(&mut self, key: &str, value: JsValue) {
         log::debug!(
             "pdfium-render::PdfiumRenderWasmState::set(): setting key: {}, value: {:#?}",
             key,
@@ -6576,6 +6576,168 @@ impl PdfiumLibraryBindings for WasmPdfiumBindings {
             .unwrap() as usize as FPDF_ANNOTATION
     }
 
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFPage_CreateWidgetAnnot(
+        &self,
+        page: FPDF_PAGE,
+        form_handle: FPDF_FORMHANDLE,
+        field_name: *const c_char,
+        field_type: *const c_char,
+        rect: *const FS_RECTF,
+        field_flags: c_int,
+        options: *const *const FPDF_WCHAR,
+        option_count: usize,
+        max_length: c_int,
+        quadding: c_int,
+        default_appearance: *const c_char,
+        default_value: FPDF_WIDESTRING,
+    ) -> FPDF_ANNOTATION {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFPage_CreateWidgetAnnot()");
+
+        let state = PdfiumRenderWasmState::lock();
+
+        let field_name_cstr = unsafe { CStr::from_ptr(field_name) };
+        let field_name_bytes = field_name_cstr.to_bytes_with_nul();
+        let field_name_ptr = state.copy_bytes_to_pdfium(field_name_bytes);
+
+        let field_type_cstr = unsafe { CStr::from_ptr(field_type) };
+        let field_type_bytes = field_type_cstr.to_bytes_with_nul();
+        let field_type_ptr = state.copy_bytes_to_pdfium(field_type_bytes);
+
+        let rect_ptr = state.copy_struct_to_pdfium(rect);
+
+        // Handle options array if provided
+        // Instead of reading from pointers (which point to Rust memory we can't access),
+        // retrieve the bytes from the WASM state where they were stored
+        let options_ptr = if !options.is_null() && option_count > 0 {
+            // Retrieve the option bytes from state
+            let option_bytes: Vec<Vec<u8>> = if let Some(js_value) = state.get("__widget_annotation_options") {
+                // Convert from JavaScript Array of Uint8Arrays back to Vec<Vec<u8>>
+                let js_array = js_sys::Array::from(&js_value);
+                let mut bytes_vec = Vec::new();
+                for i in 0..js_array.length() {
+                    if let Some(uint8_array) = js_array.get(i).dyn_ref::<js_sys::Uint8Array>() {
+                        let len = uint8_array.length() as usize;
+                        let mut bytes = vec![0u8; len];
+                        uint8_array.copy_to(&mut bytes);
+                        bytes_vec.push(bytes);
+                    }
+                }
+                bytes_vec
+            } else {
+                Vec::new()
+            };
+            
+            // Copy each option's bytes to PDFium memory
+            let mut option_ptrs = Vec::new();
+            for option_bytes_vec in &option_bytes {
+                if !option_bytes_vec.is_empty() {
+                    // Copy the bytes directly to PDFium memory
+                    let option_ptr = state.copy_bytes_to_pdfium(option_bytes_vec);
+                    option_ptrs.push(option_ptr);
+                }
+            }
+            
+            // Create array of pointers in PDFium memory
+            let ptr_size = std::mem::size_of::<*const FPDF_WCHAR>();
+            let array_size = option_ptrs.len() * ptr_size;
+            let array_ptr = state.malloc(array_size);
+            
+            // Copy pointer values to PDFium's heap
+            // We must use copy_bytes_to_pdfium_address because PDFium has a separate WASM memory space
+            for (i, &opt_ptr) in option_ptrs.iter().enumerate() {
+                let ptr_bytes = (opt_ptr as u32).to_le_bytes();
+                state.copy_bytes_to_pdfium_address(&ptr_bytes, array_ptr + i * ptr_size);
+            }
+            
+            Some((array_ptr, option_ptrs))
+        } else {
+            None
+        };
+
+        // Handle default_appearance if provided
+        let default_appearance_ptr = if !default_appearance.is_null() {
+            let default_appearance_cstr = unsafe { CStr::from_ptr(default_appearance) };
+            let default_appearance_bytes = default_appearance_cstr.to_bytes_with_nul();
+            Some(state.copy_bytes_to_pdfium(default_appearance_bytes))
+        } else {
+            None
+        };
+
+        // Handle default_value if provided
+        let default_value_ptr = if !default_value.is_null() {
+            Some(state.copy_string_to_pdfium(default_value))
+        } else {
+            None
+        };
+
+        let result = state
+            .call(
+                "FPDFPage_CreateWidgetAnnot",
+                JsFunctionArgumentType::Pointer,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Number,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Number,
+                    JsFunctionArgumentType::Number,
+                    JsFunctionArgumentType::Number,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                ]),
+                {
+                    let arr = Array::new();
+                    arr.push(&Self::js_value_from_page(page));
+                    arr.push(&Self::js_value_from_form(form_handle));
+                    arr.push(&Self::js_value_from_offset(field_name_ptr));
+                    arr.push(&Self::js_value_from_offset(field_type_ptr));
+                    arr.push(&Self::js_value_from_offset(rect_ptr));
+                    arr.push(&JsValue::from_f64(field_flags as f64));
+                    let options_ptr_value = options_ptr.as_ref().map(|(p, _)| *p as f64).unwrap_or(0.0);
+                    arr.push(&JsValue::from_f64(options_ptr_value));
+                    arr.push(&JsValue::from_f64(option_count as f64));
+                    arr.push(&JsValue::from_f64(max_length as f64));
+                    arr.push(&JsValue::from_f64(quadding as f64));
+                    arr.push(&JsValue::from_f64(
+                        default_appearance_ptr.as_ref().map(|p| *p as f64).unwrap_or(0.0)
+                    ));
+                    arr.push(&JsValue::from_f64(default_value_ptr.as_ref().map(|p| *p as f64).unwrap_or(0.0)));
+                    Some(&JsValue::from(arr))
+                }
+            )
+            .as_f64()
+            .unwrap() as usize as FPDF_ANNOTATION;
+
+        // Cleanup
+        state.free(field_name_ptr);
+        state.free(field_type_ptr);
+        state.free(rect_ptr);
+        
+        if let Some((array_ptr, option_ptrs)) = options_ptr {
+            // Free each option string
+            for opt_ptr in option_ptrs {
+                state.free(opt_ptr);
+            }
+            // Free the array of pointers
+            state.free(array_ptr);
+        }
+        
+        if let Some(ptr) = default_appearance_ptr {
+            state.free(ptr);
+        }
+        
+        if let Some(ptr) = default_value_ptr {
+            state.free(ptr);
+        }
+
+        result
+    }
+
     #[allow(non_snake_case)]
     fn FPDFPage_GetAnnotCount(&self, page: FPDF_PAGE) -> c_int {
         log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFPage_GetAnnotCount()");
@@ -7229,6 +7391,51 @@ impl PdfiumLibraryBindings for WasmPdfiumBindings {
         result
     }
 
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetVertices(
+        &self,
+        annot: FPDF_ANNOTATION,
+        vertices: *const FS_POINTF,
+        count: c_ulong,
+    ) -> c_ulong {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetVertices()");
+
+        let state = PdfiumRenderWasmState::lock();
+
+        let len = count as usize * size_of::<FS_POINTF>();
+        let vertices_ptr = if len > 0 {
+            let bytes = unsafe {
+                std::slice::from_raw_parts(vertices as *const u8, len)
+            };
+            state.copy_bytes_to_pdfium(bytes)
+        } else {
+            0
+        };
+
+        let result = state
+            .call(
+                "FPDFAnnot_SetVertices",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Number,
+                ]),
+                Some(&JsValue::from(Array::of3(
+                    &Self::js_value_from_annotation(annot),
+                    &Self::js_value_from_offset(vertices_ptr),
+                    &JsValue::from_f64(count as f64),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as c_ulong;
+
+        state.free(vertices_ptr);
+
+        result
+    }
+
     #[allow(non_snake_case)]
     fn FPDFAnnot_GetInkListCount(&self, annot: FPDF_ANNOTATION) -> c_ulong {
         log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_GetInkListCount()");
@@ -7337,6 +7544,47 @@ impl PdfiumLibraryBindings for WasmPdfiumBindings {
         result
     }
 
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetLine(
+        &self,
+        annot: FPDF_ANNOTATION,
+        start: *const FS_POINTF,
+        end: *const FS_POINTF,
+    ) -> FPDF_BOOL {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetLine()");
+
+        let state = PdfiumRenderWasmState::lock();
+
+        let len = size_of::<FS_POINTF>();
+
+        let ptr_start = state.copy_struct_to_pdfium(start);
+        let ptr_end = state.copy_struct_to_pdfium(end);
+
+        let result = state
+            .call(
+                "FPDFAnnot_SetLine",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                ]),
+                Some(&JsValue::from(Array::of3(
+                    &Self::js_value_from_annotation(annot),
+                    &Self::js_value_from_offset(ptr_start),
+                    &Self::js_value_from_offset(ptr_end),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as FPDF_BOOL;
+
+        state.free(ptr_start);
+        state.free(ptr_end);
+
+        result
+    }
+
     #[allow(non_snake_case)]
     fn FPDFAnnot_SetBorder(
         &self,
@@ -7435,6 +7683,249 @@ impl PdfiumLibraryBindings for WasmPdfiumBindings {
         state.free(ptr_border_width);
 
         result
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetBSWidth(&self, annot: FPDF_ANNOTATION, width: *mut c_float) -> FPDF_BOOL {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_GetBSWidth()");
+
+        let state = PdfiumRenderWasmState::lock();
+
+        let len = size_of::<c_float>();
+
+        let ptr_width = state.malloc(len);
+
+        let result = state
+            .call(
+                "FPDFAnnot_GetBSWidth",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                ]),
+                Some(&JsValue::from(Array::of2(
+                    &Self::js_value_from_annotation(annot),
+                    &Self::js_value_from_offset(ptr_width),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as FPDF_BOOL;
+
+        if self.is_true(result) {
+            unsafe {
+                *width = state
+                    .copy_bytes_from_pdfium(ptr_width, len)
+                    .try_into()
+                    .map(c_float::from_le_bytes)
+                    .unwrap_or(0.0);
+            }
+        }
+
+        state.free(ptr_width);
+
+        result
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetBSWidth(&self, annot: FPDF_ANNOTATION, width: c_float) -> FPDF_BOOL {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetBSWidth()");
+
+        PdfiumRenderWasmState::lock()
+            .call(
+                "FPDFAnnot_SetBSWidth",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Number,
+                ]),
+                Some(&JsValue::from(Array::of2(
+                    &Self::js_value_from_annotation(annot),
+                    &JsValue::from(width),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as FPDF_BOOL
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetBSStyle(
+        &self,
+        annot: FPDF_ANNOTATION,
+        buffer: *mut c_char,
+        buflen: c_ulong,
+    ) -> c_ulong {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_GetBSStyle()");
+
+        let state = PdfiumRenderWasmState::lock();
+
+        let buffer_length = buflen as usize;
+
+        let buffer_ptr = if buffer_length > 0 {
+            state.malloc(buffer_length)
+        } else {
+            0
+        };
+
+        let result = state
+            .call(
+                "FPDFAnnot_GetBSStyle",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Number,
+                ]),
+                Some(&JsValue::from(Array::of3(
+                    &Self::js_value_from_annotation(annot),
+                    &Self::js_value_from_offset(buffer_ptr),
+                    &JsValue::from_f64(buffer_length as f64),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as usize;
+
+        if result > 0 && result <= buffer_length {
+            state.copy_struct_from_pdfium(buffer_ptr, result, buffer);
+        }
+
+        state.free(buffer_ptr);
+
+        result as c_ulong
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetBSStyle(&self, annot: FPDF_ANNOTATION, style: *const c_char) -> FPDF_BOOL {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetBSStyle()");
+
+        let state = PdfiumRenderWasmState::lock();
+
+        let style_cstr = unsafe { CStr::from_ptr(style) };
+        let style_bytes = style_cstr.to_bytes_with_nul();
+        let style_ptr = state.copy_bytes_to_pdfium(style_bytes);
+
+        let result = state
+            .call(
+                "FPDFAnnot_SetBSStyle",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                ]),
+                Some(&JsValue::from(Array::of2(
+                    &Self::js_value_from_annotation(annot),
+                    &Self::js_value_from_offset(style_ptr),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as FPDF_BOOL;
+
+        state.free(style_ptr);
+
+        result
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetBSDash(
+        &self,
+        annot: FPDF_ANNOTATION,
+        dash: *mut c_float,
+        gap: *mut c_float,
+        phase: *mut c_float,
+    ) -> FPDF_BOOL {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_GetBSDash()");
+
+        let state = PdfiumRenderWasmState::lock();
+
+        let len = size_of::<c_float>();
+
+        let ptr_dash = state.malloc(len);
+        let ptr_gap = state.malloc(len);
+        let ptr_phase = state.malloc(len);
+
+        let result = state
+            .call(
+                "FPDFAnnot_GetBSDash",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                ]),
+                Some(&JsValue::from(Array::of4(
+                    &Self::js_value_from_annotation(annot),
+                    &Self::js_value_from_offset(ptr_dash),
+                    &Self::js_value_from_offset(ptr_gap),
+                    &Self::js_value_from_offset(ptr_phase),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as FPDF_BOOL;
+
+        if self.is_true(result) {
+            unsafe {
+                *dash = state
+                    .copy_bytes_from_pdfium(ptr_dash, len)
+                    .try_into()
+                    .map(c_float::from_le_bytes)
+                    .unwrap_or(0.0);
+
+                *gap = state
+                    .copy_bytes_from_pdfium(ptr_gap, len)
+                    .try_into()
+                    .map(c_float::from_le_bytes)
+                    .unwrap_or(0.0);
+
+                *phase = state
+                    .copy_bytes_from_pdfium(ptr_phase, len)
+                    .try_into()
+                    .map(c_float::from_le_bytes)
+                    .unwrap_or(0.0);
+            }
+        }
+
+        state.free(ptr_dash);
+        state.free(ptr_gap);
+        state.free(ptr_phase);
+
+        result
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetBSDash(
+        &self,
+        annot: FPDF_ANNOTATION,
+        dash: c_float,
+        gap: c_float,
+        phase: c_float,
+    ) -> FPDF_BOOL {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetBSDash()");
+
+        PdfiumRenderWasmState::lock()
+            .call(
+                "FPDFAnnot_SetBSDash",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Number,
+                    JsFunctionArgumentType::Number,
+                    JsFunctionArgumentType::Number,
+                ]),
+                Some(&JsValue::from(Array::of4(
+                    &Self::js_value_from_annotation(annot),
+                    &JsValue::from(dash),
+                    &JsValue::from(gap),
+                    &JsValue::from(phase),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as FPDF_BOOL
     }
 
     #[allow(non_snake_case)]
@@ -8811,6 +9302,760 @@ impl PdfiumLibraryBindings for WasmPdfiumBindings {
     }
 
     #[allow(non_snake_case)]
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDF_EnsureAcroForm(&self, document: FPDF_DOCUMENT) -> FPDF_BOOL {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDF_EnsureAcroForm()");
+
+        PdfiumRenderWasmState::lock()
+            .call(
+                "FPDF_EnsureAcroForm",
+                JsFunctionArgumentType::Number,
+                Some(vec![JsFunctionArgumentType::Pointer]),
+                Some(&JsValue::from(Array::of1(&Self::js_value_from_document(document)))),
+            )
+            .as_f64()
+            .unwrap() as FPDF_BOOL
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldOptionArray(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        options: *const *const FPDF_WCHAR,
+        count: usize,
+    ) -> FPDF_BOOL {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetFormFieldOptionArray()");
+
+        let state = PdfiumRenderWasmState::lock();
+
+        // Copy each option string to PDFium memory
+        let mut option_ptrs = Vec::new();
+        for i in 0..count {
+            let option_str = unsafe { *options.add(i) };
+            if !option_str.is_null() {
+                let option_ptr = state.copy_string_to_pdfium(option_str);
+                option_ptrs.push(option_ptr);
+            }
+        }
+
+        // Create array of pointers in PDFium memory
+        let ptr_size = std::mem::size_of::<*const FPDF_WCHAR>();
+        let array_size = option_ptrs.len() * ptr_size;
+        let array_ptr = state.malloc(array_size);
+
+        // Copy pointer values to PDFium's heap
+        // We must use copy_bytes_to_pdfium_address because PDFium has a separate WASM memory space
+        for (i, &opt_ptr) in option_ptrs.iter().enumerate() {
+            let ptr_bytes = (opt_ptr as u32).to_le_bytes();
+            state.copy_bytes_to_pdfium_address(&ptr_bytes, array_ptr + i * ptr_size);
+        }
+
+        let result = state
+            .call(
+                "FPDFAnnot_SetFormFieldOptionArray",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Number,
+                ]),
+                Some(&JsValue::from(Array::of4(
+                    &Self::js_value_from_form(form),
+                    &Self::js_value_from_annotation(annot),
+                    &Self::js_value_from_offset(array_ptr),
+                    &JsValue::from_f64(count as f64),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as FPDF_BOOL;
+
+        // Cleanup
+        for opt_ptr in option_ptrs {
+            state.free(opt_ptr);
+        }
+        state.free(array_ptr);
+
+        result
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldOptionArrayWithExportValues(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        export_values: *const *const FPDF_WCHAR,
+        display_labels: *const *const FPDF_WCHAR,
+        count: usize,
+    ) -> FPDF_BOOL {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetFormFieldOptionArrayWithExportValues()");
+
+        let state = PdfiumRenderWasmState::lock();
+
+        // Copy export values
+        let mut export_ptrs = Vec::new();
+        for i in 0..count {
+            let export_str = unsafe { *export_values.add(i) };
+            if !export_str.is_null() {
+                let export_ptr = state.copy_string_to_pdfium(export_str);
+                export_ptrs.push(export_ptr);
+            }
+        }
+
+        // Copy display labels
+        let mut display_ptrs = Vec::new();
+        for i in 0..count {
+            let display_str = unsafe { *display_labels.add(i) };
+            if !display_str.is_null() {
+                let display_ptr = state.copy_string_to_pdfium(display_str);
+                display_ptrs.push(display_ptr);
+            }
+        }
+
+        // Create arrays of pointers
+        let ptr_size = std::mem::size_of::<*const FPDF_WCHAR>();
+        let array_size = export_ptrs.len() * ptr_size;
+        let export_array_ptr = state.malloc(array_size);
+        let display_array_ptr = state.malloc(array_size);
+
+        // Copy pointer values to PDFium's heap
+        // We must use copy_bytes_to_pdfium_address because PDFium has a separate WASM memory space
+        for (i, &ptr) in export_ptrs.iter().enumerate() {
+            let ptr_bytes = (ptr as u32).to_le_bytes();
+            state.copy_bytes_to_pdfium_address(&ptr_bytes, export_array_ptr + i * ptr_size);
+        }
+        for (i, &ptr) in display_ptrs.iter().enumerate() {
+            let ptr_bytes = (ptr as u32).to_le_bytes();
+            state.copy_bytes_to_pdfium_address(&ptr_bytes, display_array_ptr + i * ptr_size);
+        }
+
+        let result = state
+            .call(
+                "FPDFAnnot_SetFormFieldOptionArrayWithExportValues",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Number,
+                ]),
+                Some(&JsValue::from(Array::of5(
+                    &Self::js_value_from_form(form),
+                    &Self::js_value_from_annotation(annot),
+                    &Self::js_value_from_offset(export_array_ptr),
+                    &Self::js_value_from_offset(display_array_ptr),
+                    &JsValue::from_f64(count as f64),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as FPDF_BOOL;
+
+        // Cleanup
+        for ptr in export_ptrs {
+            state.free(ptr);
+        }
+        for ptr in display_ptrs {
+            state.free(ptr);
+        }
+        state.free(export_array_ptr);
+        state.free(display_array_ptr);
+
+        result
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMaxLen(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        max_length: c_int,
+    ) -> FPDF_BOOL {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetFormFieldMaxLen()");
+
+        PdfiumRenderWasmState::lock()
+            .call(
+                "FPDFAnnot_SetFormFieldMaxLen",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Number,
+                ]),
+                Some(&JsValue::from(Array::of3(
+                    &Self::js_value_from_form(form),
+                    &Self::js_value_from_annotation(annot),
+                    &JsValue::from_f64(max_length as f64),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as FPDF_BOOL
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetFormFieldMaxLen(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+    ) -> c_int {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_GetFormFieldMaxLen()");
+
+        PdfiumRenderWasmState::lock()
+            .call(
+                "FPDFAnnot_GetFormFieldMaxLen",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                ]),
+                Some(&JsValue::from(Array::of2(
+                    &Self::js_value_from_form(form),
+                    &Self::js_value_from_annotation(annot),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as c_int
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldQuadding(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        quadding: c_int,
+    ) -> FPDF_BOOL {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetFormFieldQuadding()");
+
+        PdfiumRenderWasmState::lock()
+            .call(
+                "FPDFAnnot_SetFormFieldQuadding",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Number,
+                ]),
+                Some(&JsValue::from(Array::of3(
+                    &Self::js_value_from_form(form),
+                    &Self::js_value_from_annotation(annot),
+                    &JsValue::from_f64(quadding as f64),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as FPDF_BOOL
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetFormFieldQuadding(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+    ) -> c_int {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_GetFormFieldQuadding()");
+
+        PdfiumRenderWasmState::lock()
+            .call(
+                "FPDFAnnot_GetFormFieldQuadding",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                ]),
+                Some(&JsValue::from(Array::of2(
+                    &Self::js_value_from_form(form),
+                    &Self::js_value_from_annotation(annot),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as c_int
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldDefaultAppearance(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        appearance: *const c_char,
+    ) -> FPDF_BOOL {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetFormFieldDefaultAppearance()");
+
+        let state = PdfiumRenderWasmState::lock();
+
+        let appearance_cstr = unsafe { CStr::from_ptr(appearance) };
+        let appearance_bytes = appearance_cstr.to_bytes_with_nul();
+        let appearance_ptr = state.copy_bytes_to_pdfium(appearance_bytes);
+
+        let result = state
+            .call(
+                "FPDFAnnot_SetFormFieldDefaultAppearance",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                ]),
+                Some(&JsValue::from(Array::of3(
+                    &Self::js_value_from_form(form),
+                    &Self::js_value_from_annotation(annot),
+                    &Self::js_value_from_offset(appearance_ptr),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as FPDF_BOOL;
+
+        state.free(appearance_ptr);
+
+        result
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetFormFieldDefaultAppearance(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        buffer: *mut c_char,
+        buflen: c_ulong,
+    ) -> c_ulong {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_GetFormFieldDefaultAppearance()");
+
+        let state = PdfiumRenderWasmState::lock();
+
+        let buffer_length = buflen as usize;
+        let buffer_ptr = if buffer_length > 0 {
+            state.malloc(buffer_length)
+        } else {
+            0
+        };
+
+        let result = state
+            .call(
+                "FPDFAnnot_GetFormFieldDefaultAppearance",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Number,
+                ]),
+                Some(&JsValue::from(Array::of4(
+                    &Self::js_value_from_form(form),
+                    &Self::js_value_from_annotation(annot),
+                    &Self::js_value_from_offset(buffer_ptr),
+                    &JsValue::from_f64(buffer_length as f64),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as usize;
+
+        if result > 0 && result <= buffer_length {
+            state.copy_struct_from_pdfium(buffer_ptr, result, buffer);
+        }
+
+        state.free(buffer_ptr);
+
+        result as c_ulong
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldDefaultValue(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        value: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetFormFieldDefaultValue()");
+
+        let state = PdfiumRenderWasmState::lock();
+
+        let value_ptr = state.copy_string_to_pdfium(value);
+
+        let result = state
+            .call(
+                "FPDFAnnot_SetFormFieldDefaultValue",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                ]),
+                Some(&JsValue::from(Array::of3(
+                    &Self::js_value_from_form(form),
+                    &Self::js_value_from_annotation(annot),
+                    &Self::js_value_from_offset(value_ptr),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as FPDF_BOOL;
+
+        state.free(value_ptr);
+
+        result
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_GetFormFieldDefaultValue(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        buffer: *mut FPDF_WCHAR,
+        buflen: c_ulong,
+    ) -> c_ulong {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_GetFormFieldDefaultValue()");
+
+        let state = PdfiumRenderWasmState::lock();
+
+        let buffer_length = buflen as usize;
+        let buffer_ptr = if buffer_length > 0 {
+            state.malloc(buffer_length)
+        } else {
+            0
+        };
+
+        let result = state
+            .call(
+                "FPDFAnnot_GetFormFieldDefaultValue",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Number,
+                ]),
+                Some(&JsValue::from(Array::of4(
+                    &Self::js_value_from_form(form),
+                    &Self::js_value_from_annotation(annot),
+                    &Self::js_value_from_offset(buffer_ptr),
+                    &JsValue::from_f64(buffer_length as f64),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as usize;
+
+        if result > 0 && result <= buffer_length {
+            state.copy_struct_from_pdfium(buffer_ptr, result, buffer);
+        }
+
+        state.free(buffer_ptr);
+
+        result as c_ulong
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKNormalCaption(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        caption: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetFormFieldMKNormalCaption()");
+
+        let state = PdfiumRenderWasmState::lock();
+
+        let caption_ptr = state.copy_string_to_pdfium(caption);
+
+        let result = state
+            .call(
+                "FPDFAnnot_SetFormFieldMKNormalCaption",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                ]),
+                Some(&JsValue::from(Array::of3(
+                    &Self::js_value_from_form(form),
+                    &Self::js_value_from_annotation(annot),
+                    &Self::js_value_from_offset(caption_ptr),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as FPDF_BOOL;
+
+        state.free(caption_ptr);
+
+        result
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKRolloverCaption(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        caption: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetFormFieldMKRolloverCaption()");
+
+        let state = PdfiumRenderWasmState::lock();
+
+        let caption_ptr = state.copy_string_to_pdfium(caption);
+
+        let result = state
+            .call(
+                "FPDFAnnot_SetFormFieldMKRolloverCaption",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                ]),
+                Some(&JsValue::from(Array::of3(
+                    &Self::js_value_from_form(form),
+                    &Self::js_value_from_annotation(annot),
+                    &Self::js_value_from_offset(caption_ptr),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as FPDF_BOOL;
+
+        state.free(caption_ptr);
+
+        result
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKDownCaption(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        caption: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetFormFieldMKDownCaption()");
+
+        let state = PdfiumRenderWasmState::lock();
+
+        let caption_ptr = state.copy_string_to_pdfium(caption);
+
+        let result = state
+            .call(
+                "FPDFAnnot_SetFormFieldMKDownCaption",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                ]),
+                Some(&JsValue::from(Array::of3(
+                    &Self::js_value_from_form(form),
+                    &Self::js_value_from_annotation(annot),
+                    &Self::js_value_from_offset(caption_ptr),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as FPDF_BOOL;
+
+        state.free(caption_ptr);
+
+        result
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKBackgroundColor(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        color_type: c_int,
+        color: *const c_float,
+        component_count: usize,
+    ) -> FPDF_BOOL {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetFormFieldMKBackgroundColor()");
+
+        let state = PdfiumRenderWasmState::lock();
+
+        let color_size = component_count * std::mem::size_of::<c_float>();
+        let color_ptr = state.copy_bytes_to_pdfium(unsafe {
+            std::slice::from_raw_parts(color as *const u8, color_size)
+        });
+
+        let result = state
+            .call(
+                "FPDFAnnot_SetFormFieldMKBackgroundColor",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Number,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Number,
+                ]),
+                Some(&JsValue::from(Array::of5(
+                    &Self::js_value_from_form(form),
+                    &Self::js_value_from_annotation(annot),
+                    &JsValue::from_f64(color_type as f64),
+                    &Self::js_value_from_offset(color_ptr),
+                    &JsValue::from_f64(component_count as f64),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as FPDF_BOOL;
+
+        state.free(color_ptr);
+
+        result
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKBorderColor(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        color_type: c_int,
+        color: *const c_float,
+        component_count: usize,
+    ) -> FPDF_BOOL {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetFormFieldMKBorderColor()");
+
+        let state = PdfiumRenderWasmState::lock();
+
+        let color_size = component_count * std::mem::size_of::<c_float>();
+        let color_ptr = state.copy_bytes_to_pdfium(unsafe {
+            std::slice::from_raw_parts(color as *const u8, color_size)
+        });
+
+        let result = state
+            .call(
+                "FPDFAnnot_SetFormFieldMKBorderColor",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Number,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Number,
+                ]),
+                Some(&JsValue::from(Array::of5(
+                    &Self::js_value_from_form(form),
+                    &Self::js_value_from_annotation(annot),
+                    &JsValue::from_f64(color_type as f64),
+                    &Self::js_value_from_offset(color_ptr),
+                    &JsValue::from_f64(component_count as f64),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as FPDF_BOOL;
+
+        state.free(color_ptr);
+
+        result
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKRotation(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        rotation: c_int,
+    ) -> FPDF_BOOL {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetFormFieldMKRotation()");
+
+        PdfiumRenderWasmState::lock()
+            .call(
+                "FPDFAnnot_SetFormFieldMKRotation",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Number,
+                ]),
+                Some(&JsValue::from(Array::of3(
+                    &Self::js_value_from_form(form),
+                    &Self::js_value_from_annotation(annot),
+                    &JsValue::from_f64(rotation as f64),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as FPDF_BOOL
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKTextPosition(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        position: c_int,
+    ) -> FPDF_BOOL {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetFormFieldMKTextPosition()");
+
+        PdfiumRenderWasmState::lock()
+            .call(
+                "FPDFAnnot_SetFormFieldMKTextPosition",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Number,
+                ]),
+                Some(&JsValue::from(Array::of3(
+                    &Self::js_value_from_form(form),
+                    &Self::js_value_from_annotation(annot),
+                    &JsValue::from_f64(position as f64),
+                ))),
+            )
+            .as_f64()
+            .unwrap() as FPDF_BOOL
+    }
+
+    #[cfg(feature = "pdfium_future")]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetFormFieldMKIconFit(
+        &self,
+        form: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        scale_when: c_int,
+        scale_type: c_int,
+        left_pos: c_float,
+        bottom_pos: c_float,
+        fit_bounds: FPDF_BOOL,
+    ) -> FPDF_BOOL {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetFormFieldMKIconFit()");
+
+        PdfiumRenderWasmState::lock()
+            .call(
+                "FPDFAnnot_SetFormFieldMKIconFit",
+                JsFunctionArgumentType::Number,
+                Some(vec![
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Pointer,
+                    JsFunctionArgumentType::Number,
+                    JsFunctionArgumentType::Number,
+                    JsFunctionArgumentType::Number,
+                    JsFunctionArgumentType::Number,
+                    JsFunctionArgumentType::Number,
+                ]),
+                {
+                    let arr = Array::new();
+                    arr.push(&Self::js_value_from_form(form));
+                    arr.push(&Self::js_value_from_annotation(annot));
+                    arr.push(&JsValue::from_f64(scale_when as f64));
+                    arr.push(&JsValue::from_f64(scale_type as f64));
+                    arr.push(&JsValue::from_f64(left_pos as f64));
+                    arr.push(&JsValue::from_f64(bottom_pos as f64));
+                    arr.push(&JsValue::from_f64(fit_bounds as f64));
+                    Some(&JsValue::from(arr))
+                }
+            )
+            .as_f64()
+            .unwrap() as FPDF_BOOL
+    }
+
     fn FPDFDOC_InitFormFillEnvironment(
         &self,
         document: FPDF_DOCUMENT,

@@ -3,13 +3,11 @@
 
 use crate::bindgen::{FPDF_ANNOTATION, FPDF_FORMHANDLE};
 use crate::bindings::PdfiumLibraryBindings;
+use crate::error::PdfiumError;
 use crate::pdf::document::page::field::options::PdfFormFieldOptions;
 use crate::pdf::document::page::field::private::internal::{
     PdfFormFieldFlags, PdfFormFieldPrivate,
 };
-
-#[cfg(any(feature = "pdfium_future", feature = "pdfium_7350"))]
-use crate::error::PdfiumError;
 
 #[cfg(doc)]
 use {
@@ -59,13 +57,74 @@ impl<'a> PdfFormListBoxField<'a> {
         &self.options
     }
 
-    /// Returns the displayed label for the currently selected option in this [PdfFormListBoxField] object, if any.
+    /// Returns the current value(s) of this [PdfFormListBoxField] object.
+    /// 
+    /// For multi-select list boxes (where [PdfFormListBoxField::is_multiselect()] returns `true`),
+    /// this returns a comma-separated string of all selected option labels.
+    /// For single-select list boxes, this returns the label of the currently selected option.
     #[inline]
     pub fn value(&self) -> Option<String> {
-        self.options()
+        let selected: Vec<String> = self.options()
             .iter()
-            .find(|option| option.is_set())
-            .and_then(|option| option.label().cloned())
+            .filter_map(|option| {
+                if option.is_set() {
+                    option.label().cloned()
+                } else {
+                    None
+                }
+            })
+            .collect();
+        
+        if selected.is_empty() {
+            None
+        } else if self.is_multiselect() {
+            // For multi-select, return comma-separated values
+            Some(selected.join(","))
+        } else {
+            // For single-select, return the first (and only) selected value
+            selected.first().cloned()
+        }
+    }
+
+    /// Sets the value of this [PdfFormListBoxField] object.
+    ///
+    /// The value should match the label of one of the available options in this list box.
+    /// For list boxes that support multiple selections ([PdfFormListBoxField::is_multiselect()]
+    /// returns `true`), this method sets a single selected value; use [PdfFormListBoxField::set_values()]
+    /// for multi-selection scenarios.
+    #[inline]
+    pub fn set_value(&mut self, value: &str) -> Result<(), PdfiumError> {
+        self.set_value_impl(value)
+    }
+
+    /// Sets multiple selected values for this [PdfFormListBoxField] object.
+    ///
+    /// This method is intended for list boxes that support multiple selections
+    /// ([PdfFormListBoxField::is_multiselect()] returns `true`). The values should match
+    /// the labels of available options in this list box.
+    ///
+    /// **Note:** This implementation has limitations. For multi-select list boxes, the PDF
+    /// specification requires the "V" entry to be an array, but PDFium's API only allows
+    /// setting string values. This method attempts to work around this by setting the first
+    /// value, which may not fully support multi-select. Proper multi-select support would
+    /// require direct PDF dictionary manipulation to set V as an array.
+    pub fn set_values(&mut self, values: &[&str]) -> Result<(), PdfiumError> {
+        if values.is_empty() {
+            // Clear all selections by setting empty value
+            return self.set_value_impl("");
+        }
+        
+        if values.len() == 1 {
+            // Single value - use the standard set_value
+            return self.set_value_impl(values[0]);
+        }
+        
+        // For multiple values, PDFium's API limitation means we can only set one value
+        // as a string. The PDF spec requires V to be an array for multi-select, but
+        // FPDFAnnot_SetStringValue only sets strings. We'll set the first value for now.
+        // TODO: Implement proper multi-select by directly manipulating the PDF dictionary
+        // to set V as an array of option values or indices.
+        self.set_value_impl(values[0])
     }
 
     /// Returns `true` if the option items of this [PdfFormListBoxField] should be sorted

@@ -94,20 +94,6 @@ impl<'a> PdfStyledString<'a> {
         // It's more expensive to try to match the fonts based on name, so we try to match
         // based on FPDF_FONT handles first.
 
-        println!(
-            "does_match_object_styling()? {} ==? {}, {:?} ==? {:?}, {} ==? {}, {} ==? {}, {} ==? {}",
-            self.font_size().value,
-            other_font_size.value,
-            self.font().handle(),
-            other_font.handle(),
-            self.font().is_all_caps(),
-            other_font.is_all_caps(),
-            self.font().is_small_caps(),
-            other_font.is_small_caps(),
-            self.font().family(),
-            other_font.family()
-        );
-
         if self.font_size() != other_font_size {
             return false;
         }
@@ -425,11 +411,6 @@ impl<'a> PdfParagraph<'a> {
                 {
                     // Yes, this line break probably indicates a new paragraph.
 
-                    println!(
-                        "starting a new line with alignment {:?}",
-                        next_line_alignment
-                    );
-
                     lines.push(PdfLine::new(
                         current_line_alignment,
                         current_line_bottom,
@@ -446,8 +427,6 @@ impl<'a> PdfParagraph<'a> {
                 } else {
                     // The line break probably just represents a carriage-return rather than the
                     // deliberate end of a paragraph.
-
-                    println!("carriage return");
                 }
             }
 
@@ -495,27 +474,9 @@ impl<'a> PdfParagraph<'a> {
                             " "
                         };
 
-                        println!(
-                            "styling matches, push \"{}\" onto \"{}\", separated by \"{}\"",
-                            object.text(),
-                            last_string.text(),
-                            separator
-                        );
-
                         last_string.push(object.text(), separator);
-
-                        println!(
-                            "last_object_right = {:?},  this object left = {:?}",
-                            last_object_right,
-                            object.bounds().unwrap().left(),
-                        );
                     } else {
                         // The styles of the two text objects are different, so they can't be merged.
-
-                        println!(
-                            "styling differs, start new fragment with \"{}\"",
-                            object.text()
-                        );
 
                         current_line_fragments.push(PdfParagraphFragment::StyledString(
                             PdfStyledString::from_text_object(object),
@@ -523,8 +484,6 @@ impl<'a> PdfParagraph<'a> {
                     }
                 } else {
                     // The last fragment wasn't a string fragment, so we have to start a new fragment.
-
-                    println!("start new text fragment with \"{}\"", object.text());
 
                     current_line_fragments.push(PdfParagraphFragment::StyledString(
                         PdfStyledString::from_text_object(object),
@@ -566,8 +525,6 @@ impl<'a> PdfParagraph<'a> {
         let mut first_line_alignment = last_line_alignment;
 
         for mut line in lines.drain(..) {
-            println!("********* got line: {:?}", line.alignment);
-
             if line.alignment != last_line_alignment {
                 // TODO: this won't work as expected for non-force-justified paragraphs
                 // where the last line in the paragraph is left-aligned, not justified
@@ -803,8 +760,6 @@ impl<'a> PdfParagraph<'a> {
     /// Returns the text contained within all text fragments in this paragraph.
     #[inline]
     pub fn text(&self) -> String {
-        println!(">>>> text(): fragments count = {}", self.fragments.len());
-
         self.fragments
             .iter()
             .filter_map(|fragment| match fragment {
@@ -843,18 +798,8 @@ impl<'a> PdfParagraph<'a> {
     }
 
     pub fn d(&self) {
-        for (index, f) in self.fragments.iter().enumerate() {
-            match f {
-                PdfParagraphFragment::StyledString(s) => {
-                    println!("{}: {}", index, s.text());
-                }
-                PdfParagraphFragment::LineBreak(_) => {
-                    println!("{}: line break", index);
-                }
-                PdfParagraphFragment::NonTextObject(_) => {
-                    println!("{}: not a text object", index);
-                }
-            }
+        for (_index, _f) in self.fragments.iter().enumerate() {
+            // Debug method - intentionally left empty
         }
     }
 }

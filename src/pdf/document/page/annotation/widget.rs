@@ -6,6 +6,7 @@ use crate::bindings::PdfiumLibraryBindings;
 use crate::pdf::document::page::annotation::attachment_points::PdfPageAnnotationAttachmentPoints;
 use crate::pdf::document::page::annotation::objects::PdfPageAnnotationObjects;
 use crate::pdf::document::page::annotation::private::internal::PdfPageAnnotationPrivate;
+use crate::pdf::document::page::annotation::signature_appearance::SignatureAppearanceBuilder;
 use crate::pdf::document::page::field::PdfFormField;
 use crate::pdf::document::page::object::ownership::PdfPageObjectOwnership;
 use crate::pdf::document::page::objects::private::internal::PdfPageObjectsPrivate;
@@ -64,6 +65,19 @@ impl<'a> PdfPageWidgetAnnotation<'a> {
     #[inline]
     pub fn form_field_mut(&mut self) -> Option<&mut PdfFormField<'a>> {
         self.form_field.as_mut()
+    }
+
+    /// Returns a builder for setting the visual appearance of this widget annotation.
+    ///
+    /// For signature fields, prefer using [PdfFormSignatureField::set_signature_appearance()]
+    /// which provides better discoverability and documentation for the signature use case.
+    ///
+    /// This method is useful when you need to set appearances on widget annotations
+    /// that are not signature fields, or when working with the annotation directly.
+    ///
+    /// [PdfFormSignatureField::set_signature_appearance()]: crate::pdf::document::page::field::signature::PdfFormSignatureField::set_signature_appearance
+    pub fn appearance_builder(&self) -> SignatureAppearanceBuilder<'a> {
+        SignatureAppearanceBuilder::new(self.annotation_handle, self.bindings)
     }
 }
 

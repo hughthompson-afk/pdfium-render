@@ -442,6 +442,57 @@ impl<'a> PdfPage<'a> {
         &mut self.annotations
     }
 
+    /// Creates a new [PdfPageWidgetAnnotation] (form field annotation) on this page.
+    ///
+    /// This is a convenience method that delegates to [PdfPageAnnotations::create_widget_annotation()].
+    ///
+    /// # Arguments
+    ///
+    /// * `form_handle` - Handle to the form fill module (required).
+    /// * `field_name` - The field name (e.g., "MyTextField").
+    /// * `field_type` - The type of form field to create.
+    /// * `rect` - Bounding rectangle for the widget annotation.
+    /// * `options` - Optional array of option strings for choice fields.
+    /// * `max_length` - Optional maximum length for text fields.
+    /// * `quadding` - Optional text alignment: 0=left, 1=center, 2=right.
+    /// * `default_appearance` - Optional default appearance string.
+    /// * `default_value` - Optional default value string.
+    /// * `additional_flags` - Optional additional form field flags to combine with required flags.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(PdfPageWidgetAnnotation)` if successful, or an error if the operation fails.
+    #[cfg(feature = "pdfium_future")]
+    pub fn create_widget_annotation(
+        &mut self,
+        form_handle: crate::bindgen::FPDF_FORMHANDLE,
+        field_name: &str,
+        field_type: crate::pdf::document::page::field::PdfFormFieldType,
+        rect: crate::pdf::rect::PdfRect,
+        options: Option<&[&str]>,
+        max_length: Option<i32>,
+        quadding: Option<i32>,
+        default_appearance: Option<&str>,
+        default_value: Option<&str>,
+        additional_flags: Option<u32>,
+    ) -> Result<
+        crate::pdf::document::page::annotation::widget::PdfPageWidgetAnnotation<'a>,
+        crate::error::PdfiumError,
+    > {
+        self.annotations_mut().create_widget_annotation(
+            form_handle,
+            field_name,
+            field_type,
+            rect,
+            options,
+            max_length,
+            quadding,
+            default_appearance,
+            default_value,
+            additional_flags,
+        )
+    }
+
     /// Returns an immutable collection of the bounding boxes defining the extents of this [PdfPage].
     #[inline]
     pub fn boundaries(&self) -> &PdfPageBoundaries<'a> {

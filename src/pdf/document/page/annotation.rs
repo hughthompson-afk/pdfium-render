@@ -1,15 +1,21 @@
 //! Defines the [PdfPageAnnotation] struct, exposing functionality related to a single annotation.
 
 pub mod attachment_points;
+pub mod caret;
 pub mod circle;
+pub mod file_attachment;
 pub mod free_text;
 pub mod highlight;
 pub mod ink;
+pub mod line;
 pub mod link;
 pub mod objects;
 pub mod popup;
 pub(crate) mod private; // Keep private so that the PdfPageAnnotationPrivate trait is not exposed.
+pub mod polygon;
+pub mod polyline;
 pub mod redacted;
+pub mod signature_appearance;
 pub mod square;
 pub mod squiggly;
 pub mod stamp;
@@ -18,6 +24,7 @@ pub mod text;
 pub mod underline;
 pub mod unsupported;
 pub mod variable_text;
+pub mod watermark;
 pub mod widget;
 pub mod xfa_widget;
 
@@ -35,13 +42,18 @@ use crate::bindings::PdfiumLibraryBindings;
 use crate::error::PdfiumError;
 use crate::pdf::color::PdfColor;
 use crate::pdf::document::page::annotation::attachment_points::PdfPageAnnotationAttachmentPoints;
+use crate::pdf::document::page::annotation::caret::PdfPageCaretAnnotation;
 use crate::pdf::document::page::annotation::circle::PdfPageCircleAnnotation;
+use crate::pdf::document::page::annotation::file_attachment::PdfPageFileAttachmentAnnotation;
 use crate::pdf::document::page::annotation::free_text::PdfPageFreeTextAnnotation;
 use crate::pdf::document::page::annotation::highlight::PdfPageHighlightAnnotation;
 use crate::pdf::document::page::annotation::ink::PdfPageInkAnnotation;
+use crate::pdf::document::page::annotation::line::PdfPageLineAnnotation;
 use crate::pdf::document::page::annotation::link::PdfPageLinkAnnotation;
 use crate::pdf::document::page::annotation::objects::PdfPageAnnotationObjects;
 use crate::pdf::document::page::annotation::popup::PdfPagePopupAnnotation;
+use crate::pdf::document::page::annotation::polygon::PdfPagePolygonAnnotation;
+use crate::pdf::document::page::annotation::polyline::PdfPagePolylineAnnotation;
 use crate::pdf::document::page::annotation::private::internal::{
     PdfAnnotationFlags, PdfPageAnnotationPrivate,
 };
@@ -53,6 +65,7 @@ use crate::pdf::document::page::annotation::strikeout::PdfPageStrikeoutAnnotatio
 use crate::pdf::document::page::annotation::text::PdfPageTextAnnotation;
 use crate::pdf::document::page::annotation::underline::PdfPageUnderlineAnnotation;
 use crate::pdf::document::page::annotation::unsupported::PdfPageUnsupportedAnnotation;
+use crate::pdf::document::page::annotation::watermark::PdfPageWatermarkAnnotation;
 use crate::pdf::document::page::annotation::widget::PdfPageWidgetAnnotation;
 use crate::pdf::document::page::annotation::xfa_widget::PdfPageXfaWidgetAnnotation;
 use crate::pdf::document::page::field::PdfFormField;
@@ -73,11 +86,16 @@ use {crate::pdf::document::page::field::PdfFormFieldCommon, crate::pdf::document
 ///
 /// Pdfium currently supports creating, editing, and rendering the following types of annotations:
 ///
+/// * [PdfPageAnnotationType::Caret]
 /// * [PdfPageAnnotationType::Circle]
+/// * [PdfPageAnnotationType::FileAttachment]
 /// * [PdfPageAnnotationType::FreeText]
 /// * [PdfPageAnnotationType::Highlight]
 /// * [PdfPageAnnotationType::Ink]
+/// * [PdfPageAnnotationType::Line]
 /// * [PdfPageAnnotationType::Link]
+/// * [PdfPageAnnotationType::Polygon]
+/// * [PdfPageAnnotationType::Polyline]
 /// * [PdfPageAnnotationType::Popup]
 /// * [PdfPageAnnotationType::Redacted]
 /// * [PdfPageAnnotationType::Square]
@@ -86,6 +104,7 @@ use {crate::pdf::document::page::field::PdfFormFieldCommon, crate::pdf::document
 /// * [PdfPageAnnotationType::Strikeout]
 /// * [PdfPageAnnotationType::Text]
 /// * [PdfPageAnnotationType::Underline]
+/// * [PdfPageAnnotationType::Watermark]
 /// * [PdfPageAnnotationType::Widget]
 /// * [PdfPageAnnotationType::XfaWidget]
 ///
@@ -202,21 +221,27 @@ impl PdfPageAnnotationType {
 
 /// A single user annotation on a [PdfPage].
 pub enum PdfPageAnnotation<'a> {
+    Caret(PdfPageCaretAnnotation<'a>),
     Circle(PdfPageCircleAnnotation<'a>),
+    FileAttachment(PdfPageFileAttachmentAnnotation<'a>),
     FreeText(PdfPageFreeTextAnnotation<'a>),
     Highlight(PdfPageHighlightAnnotation<'a>),
     Ink(PdfPageInkAnnotation<'a>),
+    Line(PdfPageLineAnnotation<'a>),
     Link(PdfPageLinkAnnotation<'a>),
+    Polygon(PdfPagePolygonAnnotation<'a>),
+    Polyline(PdfPagePolylineAnnotation<'a>),
     Popup(PdfPagePopupAnnotation<'a>),
+    Redacted(PdfPageRedactedAnnotation<'a>),
     Square(PdfPageSquareAnnotation<'a>),
     Squiggly(PdfPageSquigglyAnnotation<'a>),
     Stamp(PdfPageStampAnnotation<'a>),
     Strikeout(PdfPageStrikeoutAnnotation<'a>),
     Text(PdfPageTextAnnotation<'a>),
     Underline(PdfPageUnderlineAnnotation<'a>),
+    Watermark(PdfPageWatermarkAnnotation<'a>),
     Widget(PdfPageWidgetAnnotation<'a>),
     XfaWidget(PdfPageXfaWidgetAnnotation<'a>),
-    Redacted(PdfPageRedactedAnnotation<'a>),
 
     /// Common properties shared by all [PdfPageAnnotation] types can still be accessed for
     /// annotations not supported by Pdfium, but annotation-specific functionality
@@ -237,8 +262,24 @@ impl<'a> PdfPageAnnotation<'a> {
                 .unwrap_or(PdfPageAnnotationType::Unknown);
 
         match annotation_type {
+            PdfPageAnnotationType::Caret => {
+                PdfPageAnnotation::Caret(PdfPageCaretAnnotation::from_pdfium(
+                    document_handle,
+                    page_handle,
+                    annotation_handle,
+                    bindings,
+                ))
+            }
             PdfPageAnnotationType::Circle => {
                 PdfPageAnnotation::Circle(PdfPageCircleAnnotation::from_pdfium(
+                    document_handle,
+                    page_handle,
+                    annotation_handle,
+                    bindings,
+                ))
+            }
+            PdfPageAnnotationType::FileAttachment => {
+                PdfPageAnnotation::FileAttachment(PdfPageFileAttachmentAnnotation::from_pdfium(
                     document_handle,
                     page_handle,
                     annotation_handle,
@@ -269,6 +310,14 @@ impl<'a> PdfPageAnnotation<'a> {
                     bindings,
                 ))
             }
+            PdfPageAnnotationType::Line => {
+                PdfPageAnnotation::Line(PdfPageLineAnnotation::from_pdfium(
+                    document_handle,
+                    page_handle,
+                    annotation_handle,
+                    bindings,
+                ))
+            }
             PdfPageAnnotationType::Link => {
                 PdfPageAnnotation::Link(PdfPageLinkAnnotation::from_pdfium(
                     document_handle,
@@ -277,8 +326,32 @@ impl<'a> PdfPageAnnotation<'a> {
                     bindings,
                 ))
             }
+            PdfPageAnnotationType::Polygon => {
+                PdfPageAnnotation::Polygon(PdfPagePolygonAnnotation::from_pdfium(
+                    document_handle,
+                    page_handle,
+                    annotation_handle,
+                    bindings,
+                ))
+            }
+            PdfPageAnnotationType::Polyline => {
+                PdfPageAnnotation::Polyline(PdfPagePolylineAnnotation::from_pdfium(
+                    document_handle,
+                    page_handle,
+                    annotation_handle,
+                    bindings,
+                ))
+            }
             PdfPageAnnotationType::Popup => {
                 PdfPageAnnotation::Popup(PdfPagePopupAnnotation::from_pdfium(
+                    document_handle,
+                    page_handle,
+                    annotation_handle,
+                    bindings,
+                ))
+            }
+            PdfPageAnnotationType::Redacted => {
+                PdfPageAnnotation::Redacted(PdfPageRedactedAnnotation::from_pdfium(
                     document_handle,
                     page_handle,
                     annotation_handle,
@@ -333,6 +406,14 @@ impl<'a> PdfPageAnnotation<'a> {
                     bindings,
                 ))
             }
+            PdfPageAnnotationType::Watermark => {
+                PdfPageAnnotation::Watermark(PdfPageWatermarkAnnotation::from_pdfium(
+                    document_handle,
+                    page_handle,
+                    annotation_handle,
+                    bindings,
+                ))
+            }
             PdfPageAnnotationType::Widget => {
                 PdfPageAnnotation::Widget(PdfPageWidgetAnnotation::from_pdfium(
                     document_handle,
@@ -351,14 +432,6 @@ impl<'a> PdfPageAnnotation<'a> {
                     bindings,
                 ))
             }
-            PdfPageAnnotationType::Redacted => {
-                PdfPageAnnotation::Redacted(PdfPageRedactedAnnotation::from_pdfium(
-                    document_handle,
-                    page_handle,
-                    annotation_handle,
-                    bindings,
-                ))
-            }
             _ => PdfPageAnnotation::Unsupported(PdfPageUnsupportedAnnotation::from_pdfium(
                 document_handle,
                 page_handle,
@@ -372,21 +445,27 @@ impl<'a> PdfPageAnnotation<'a> {
     #[inline]
     pub(crate) fn unwrap_as_trait(&self) -> &dyn PdfPageAnnotationPrivate<'a> {
         match self {
+            PdfPageAnnotation::Caret(annotation) => annotation,
             PdfPageAnnotation::Circle(annotation) => annotation,
+            PdfPageAnnotation::FileAttachment(annotation) => annotation,
             PdfPageAnnotation::FreeText(annotation) => annotation,
             PdfPageAnnotation::Highlight(annotation) => annotation,
             PdfPageAnnotation::Ink(annotation) => annotation,
+            PdfPageAnnotation::Line(annotation) => annotation,
             PdfPageAnnotation::Link(annotation) => annotation,
+            PdfPageAnnotation::Polygon(annotation) => annotation,
+            PdfPageAnnotation::Polyline(annotation) => annotation,
             PdfPageAnnotation::Popup(annotation) => annotation,
+            PdfPageAnnotation::Redacted(annotation) => annotation,
             PdfPageAnnotation::Square(annotation) => annotation,
             PdfPageAnnotation::Squiggly(annotation) => annotation,
             PdfPageAnnotation::Stamp(annotation) => annotation,
             PdfPageAnnotation::Strikeout(annotation) => annotation,
             PdfPageAnnotation::Text(annotation) => annotation,
             PdfPageAnnotation::Underline(annotation) => annotation,
+            PdfPageAnnotation::Watermark(annotation) => annotation,
             PdfPageAnnotation::Widget(annotation) => annotation,
             PdfPageAnnotation::XfaWidget(annotation) => annotation,
-            PdfPageAnnotation::Redacted(annotation) => annotation,
             PdfPageAnnotation::Unsupported(annotation) => annotation,
         }
     }
@@ -395,21 +474,27 @@ impl<'a> PdfPageAnnotation<'a> {
     #[allow(dead_code)] // We don't currently use unwrap_as_trait_mut(), but we expect to in the future
     pub(crate) fn unwrap_as_trait_mut(&mut self) -> &mut dyn PdfPageAnnotationPrivate<'a> {
         match self {
+            PdfPageAnnotation::Caret(annotation) => annotation,
             PdfPageAnnotation::Circle(annotation) => annotation,
+            PdfPageAnnotation::FileAttachment(annotation) => annotation,
             PdfPageAnnotation::FreeText(annotation) => annotation,
             PdfPageAnnotation::Highlight(annotation) => annotation,
             PdfPageAnnotation::Ink(annotation) => annotation,
+            PdfPageAnnotation::Line(annotation) => annotation,
             PdfPageAnnotation::Link(annotation) => annotation,
+            PdfPageAnnotation::Polygon(annotation) => annotation,
+            PdfPageAnnotation::Polyline(annotation) => annotation,
             PdfPageAnnotation::Popup(annotation) => annotation,
+            PdfPageAnnotation::Redacted(annotation) => annotation,
             PdfPageAnnotation::Square(annotation) => annotation,
             PdfPageAnnotation::Squiggly(annotation) => annotation,
             PdfPageAnnotation::Stamp(annotation) => annotation,
             PdfPageAnnotation::Strikeout(annotation) => annotation,
             PdfPageAnnotation::Text(annotation) => annotation,
             PdfPageAnnotation::Underline(annotation) => annotation,
+            PdfPageAnnotation::Watermark(annotation) => annotation,
             PdfPageAnnotation::Widget(annotation) => annotation,
             PdfPageAnnotation::XfaWidget(annotation) => annotation,
-            PdfPageAnnotation::Redacted(annotation) => annotation,
             PdfPageAnnotation::Unsupported(annotation) => annotation,
         }
     }
@@ -422,11 +507,16 @@ impl<'a> PdfPageAnnotation<'a> {
     ///
     /// Pdfium currently supports creating, editing, and rendering the following types of annotations:
     ///
+    /// * [PdfPageAnnotationType::Caret]
     /// * [PdfPageAnnotationType::Circle]
+    /// * [PdfPageAnnotationType::FileAttachment]
     /// * [PdfPageAnnotationType::FreeText]
     /// * [PdfPageAnnotationType::Highlight]
     /// * [PdfPageAnnotationType::Ink]
+    /// * [PdfPageAnnotationType::Line]
     /// * [PdfPageAnnotationType::Link]
+    /// * [PdfPageAnnotationType::Polygon]
+    /// * [PdfPageAnnotationType::Polyline]
     /// * [PdfPageAnnotationType::Popup]
     /// * [PdfPageAnnotationType::Redacted]
     /// * [PdfPageAnnotationType::Square]
@@ -435,26 +525,33 @@ impl<'a> PdfPageAnnotation<'a> {
     /// * [PdfPageAnnotationType::Strikeout]
     /// * [PdfPageAnnotationType::Text]
     /// * [PdfPageAnnotationType::Underline]
+    /// * [PdfPageAnnotationType::Watermark]
     /// * [PdfPageAnnotationType::Widget]
     /// * [PdfPageAnnotationType::XfaWidget]
     #[inline]
     pub fn annotation_type(&self) -> PdfPageAnnotationType {
         match self {
+            PdfPageAnnotation::Caret(_) => PdfPageAnnotationType::Caret,
             PdfPageAnnotation::Circle(_) => PdfPageAnnotationType::Circle,
+            PdfPageAnnotation::FileAttachment(_) => PdfPageAnnotationType::FileAttachment,
             PdfPageAnnotation::FreeText(_) => PdfPageAnnotationType::FreeText,
             PdfPageAnnotation::Highlight(_) => PdfPageAnnotationType::Highlight,
             PdfPageAnnotation::Ink(_) => PdfPageAnnotationType::Ink,
+            PdfPageAnnotation::Line(_) => PdfPageAnnotationType::Line,
             PdfPageAnnotation::Link(_) => PdfPageAnnotationType::Link,
+            PdfPageAnnotation::Polygon(_) => PdfPageAnnotationType::Polygon,
+            PdfPageAnnotation::Polyline(_) => PdfPageAnnotationType::Polyline,
             PdfPageAnnotation::Popup(_) => PdfPageAnnotationType::Popup,
+            PdfPageAnnotation::Redacted(_) => PdfPageAnnotationType::Redacted,
             PdfPageAnnotation::Square(_) => PdfPageAnnotationType::Square,
             PdfPageAnnotation::Squiggly(_) => PdfPageAnnotationType::Squiggly,
             PdfPageAnnotation::Stamp(_) => PdfPageAnnotationType::Stamp,
             PdfPageAnnotation::Strikeout(_) => PdfPageAnnotationType::Strikeout,
             PdfPageAnnotation::Text(_) => PdfPageAnnotationType::Text,
             PdfPageAnnotation::Underline(_) => PdfPageAnnotationType::Underline,
+            PdfPageAnnotation::Watermark(_) => PdfPageAnnotationType::Watermark,
             PdfPageAnnotation::Widget(_) => PdfPageAnnotationType::Widget,
             PdfPageAnnotation::XfaWidget(_) => PdfPageAnnotationType::XfaWidget,
-            PdfPageAnnotation::Redacted(_) => PdfPageAnnotationType::Redacted,
             PdfPageAnnotation::Unsupported(annotation) => annotation.get_type(),
         }
     }
@@ -468,11 +565,16 @@ impl<'a> PdfPageAnnotation<'a> {
     ///
     /// Pdfium currently supports creating, editing, and rendering the following types of annotations:
     ///
+    /// * [PdfPageAnnotationType::Caret]
     /// * [PdfPageAnnotationType::Circle]
+    /// * [PdfPageAnnotationType::FileAttachment]
     /// * [PdfPageAnnotationType::FreeText]
     /// * [PdfPageAnnotationType::Highlight]
     /// * [PdfPageAnnotationType::Ink]
+    /// * [PdfPageAnnotationType::Line]
     /// * [PdfPageAnnotationType::Link]
+    /// * [PdfPageAnnotationType::Polygon]
+    /// * [PdfPageAnnotationType::Polyline]
     /// * [PdfPageAnnotationType::Popup]
     /// * [PdfPageAnnotationType::Redacted]
     /// * [PdfPageAnnotationType::Square]
@@ -481,6 +583,7 @@ impl<'a> PdfPageAnnotation<'a> {
     /// * [PdfPageAnnotationType::Strikeout]
     /// * [PdfPageAnnotationType::Text]
     /// * [PdfPageAnnotationType::Underline]
+    /// * [PdfPageAnnotationType::Watermark]
     /// * [PdfPageAnnotationType::Widget]
     /// * [PdfPageAnnotationType::XfaWidget]
     #[inline]
@@ -497,11 +600,16 @@ impl<'a> PdfPageAnnotation<'a> {
     ///
     /// Pdfium currently supports creating, editing, and rendering the following types of annotations:
     ///
+    /// * [PdfPageAnnotationType::Caret]
     /// * [PdfPageAnnotationType::Circle]
+    /// * [PdfPageAnnotationType::FileAttachment]
     /// * [PdfPageAnnotationType::FreeText]
     /// * [PdfPageAnnotationType::Highlight]
     /// * [PdfPageAnnotationType::Ink]
+    /// * [PdfPageAnnotationType::Line]
     /// * [PdfPageAnnotationType::Link]
+    /// * [PdfPageAnnotationType::Polygon]
+    /// * [PdfPageAnnotationType::Polyline]
     /// * [PdfPageAnnotationType::Popup]
     /// * [PdfPageAnnotationType::Redacted]
     /// * [PdfPageAnnotationType::Square]
@@ -510,6 +618,7 @@ impl<'a> PdfPageAnnotation<'a> {
     /// * [PdfPageAnnotationType::Strikeout]
     /// * [PdfPageAnnotationType::Text]
     /// * [PdfPageAnnotationType::Underline]
+    /// * [PdfPageAnnotationType::Watermark]
     /// * [PdfPageAnnotationType::Widget]
     /// * [PdfPageAnnotationType::XfaWidget]
     #[inline]
@@ -825,6 +934,116 @@ impl<'a> PdfPageAnnotation<'a> {
         }
     }
 
+    /// Returns an immutable reference to the underlying [PdfPageCaretAnnotation]
+    /// for this [PdfPageAnnotation], if this annotation has an annotation type of
+    /// [PdfPageAnnotationType::Caret].
+    #[inline]
+    pub fn as_caret_annotation(&self) -> Option<&PdfPageCaretAnnotation<'_>> {
+        match self {
+            PdfPageAnnotation::Caret(annotation) => Some(annotation),
+            _ => None,
+        }
+    }
+
+    /// Returns a mutable reference to the underlying [PdfPageCaretAnnotation]
+    /// for this [PdfPageAnnotation], if this annotation has an annotation type of
+    /// [PdfPageAnnotationType::Caret].
+    #[inline]
+    pub fn as_caret_annotation_mut(&mut self) -> Option<&mut PdfPageCaretAnnotation<'a>> {
+        match self {
+            PdfPageAnnotation::Caret(annotation) => Some(annotation),
+            _ => None,
+        }
+    }
+
+    /// Returns an immutable reference to the underlying [PdfPageFileAttachmentAnnotation]
+    /// for this [PdfPageAnnotation], if this annotation has an annotation type of
+    /// [PdfPageAnnotationType::FileAttachment].
+    #[inline]
+    pub fn as_file_attachment_annotation(&self) -> Option<&PdfPageFileAttachmentAnnotation<'_>> {
+        match self {
+            PdfPageAnnotation::FileAttachment(annotation) => Some(annotation),
+            _ => None,
+        }
+    }
+
+    /// Returns a mutable reference to the underlying [PdfPageFileAttachmentAnnotation]
+    /// for this [PdfPageAnnotation], if this annotation has an annotation type of
+    /// [PdfPageAnnotationType::FileAttachment].
+    #[inline]
+    pub fn as_file_attachment_annotation_mut(&mut self) -> Option<&mut PdfPageFileAttachmentAnnotation<'a>> {
+        match self {
+            PdfPageAnnotation::FileAttachment(annotation) => Some(annotation),
+            _ => None,
+        }
+    }
+
+    /// Returns an immutable reference to the underlying [PdfPageLineAnnotation]
+    /// for this [PdfPageAnnotation], if this annotation has an annotation type of
+    /// [PdfPageAnnotationType::Line].
+    #[inline]
+    pub fn as_line_annotation(&self) -> Option<&PdfPageLineAnnotation<'_>> {
+        match self {
+            PdfPageAnnotation::Line(annotation) => Some(annotation),
+            _ => None,
+        }
+    }
+
+    /// Returns a mutable reference to the underlying [PdfPageLineAnnotation]
+    /// for this [PdfPageAnnotation], if this annotation has an annotation type of
+    /// [PdfPageAnnotationType::Line].
+    #[inline]
+    pub fn as_line_annotation_mut(&mut self) -> Option<&mut PdfPageLineAnnotation<'a>> {
+        match self {
+            PdfPageAnnotation::Line(annotation) => Some(annotation),
+            _ => None,
+        }
+    }
+
+    /// Returns an immutable reference to the underlying [PdfPagePolygonAnnotation]
+    /// for this [PdfPageAnnotation], if this annotation has an annotation type of
+    /// [PdfPageAnnotationType::Polygon].
+    #[inline]
+    pub fn as_polygon_annotation(&self) -> Option<&PdfPagePolygonAnnotation<'_>> {
+        match self {
+            PdfPageAnnotation::Polygon(annotation) => Some(annotation),
+            _ => None,
+        }
+    }
+
+    /// Returns a mutable reference to the underlying [PdfPagePolygonAnnotation]
+    /// for this [PdfPageAnnotation], if this annotation has an annotation type of
+    /// [PdfPageAnnotationType::Polygon].
+    #[inline]
+    pub fn as_polygon_annotation_mut(&mut self) -> Option<&mut PdfPagePolygonAnnotation<'a>> {
+        match self {
+            PdfPageAnnotation::Polygon(annotation) => Some(annotation),
+            _ => None,
+        }
+    }
+
+    /// Returns an immutable reference to the underlying [PdfPagePolylineAnnotation]
+    /// for this [PdfPageAnnotation], if this annotation has an annotation type of
+    /// [PdfPageAnnotationType::Polyline].
+    #[inline]
+    pub fn as_polyline_annotation(&self) -> Option<&PdfPagePolylineAnnotation<'_>> {
+        match self {
+            PdfPageAnnotation::Polyline(annotation) => Some(annotation),
+            _ => None,
+        }
+    }
+
+    /// Returns a mutable reference to the underlying [PdfPagePolylineAnnotation]
+    /// for this [PdfPageAnnotation], if this annotation has an annotation type of
+    /// [PdfPageAnnotationType::Polyline].
+    #[inline]
+    pub fn as_polyline_annotation_mut(&mut self) -> Option<&mut PdfPagePolylineAnnotation<'a>> {
+        match self {
+            PdfPageAnnotation::Polyline(annotation) => Some(annotation),
+            _ => None,
+        }
+    }
+
     /// Returns an immutable reference to the underlying [PdfPageRedactedAnnotation]
     /// for this [PdfPageAnnotation], if this annotation has an annotation type of
     /// [PdfPageAnnotationType::Redacted].
@@ -843,6 +1062,28 @@ impl<'a> PdfPageAnnotation<'a> {
     pub fn as_redacted_annotation_mut(&mut self) -> Option<&mut PdfPageRedactedAnnotation<'a>> {
         match self {
             PdfPageAnnotation::Redacted(annotation) => Some(annotation),
+            _ => None,
+        }
+    }
+
+    /// Returns an immutable reference to the underlying [PdfPageWatermarkAnnotation]
+    /// for this [PdfPageAnnotation], if this annotation has an annotation type of
+    /// [PdfPageAnnotationType::Watermark].
+    #[inline]
+    pub fn as_watermark_annotation(&self) -> Option<&PdfPageWatermarkAnnotation<'_>> {
+        match self {
+            PdfPageAnnotation::Watermark(annotation) => Some(annotation),
+            _ => None,
+        }
+    }
+
+    /// Returns a mutable reference to the underlying [PdfPageWatermarkAnnotation]
+    /// for this [PdfPageAnnotation], if this annotation has an annotation type of
+    /// [PdfPageAnnotationType::Watermark].
+    #[inline]
+    pub fn as_watermark_annotation_mut(&mut self) -> Option<&mut PdfPageWatermarkAnnotation<'a>> {
+        match self {
+            PdfPageAnnotation::Watermark(annotation) => Some(annotation),
             _ => None,
         }
     }

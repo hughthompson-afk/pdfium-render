@@ -180,6 +180,23 @@ impl<'a> PdfForm<'a> {
         self.form_handle
     }
 
+    /// Creates a new [PdfForm] with the given form handle.
+    /// This is used internally to initialize the form fill environment for new documents.
+    #[cfg(feature = "pdfium_future")]
+    pub(crate) fn new(
+        form_handle: FPDF_FORMHANDLE,
+        document_handle: FPDF_DOCUMENT,
+        form_fill_info: Pin<Box<FPDF_FORMFILLINFO>>,
+        bindings: &'a dyn PdfiumLibraryBindings,
+    ) -> Self {
+        PdfForm {
+            form_handle,
+            document_handle,
+            form_fill_info,
+            bindings,
+        }
+    }
+
     /// Returns the [PdfiumLibraryBindings] used by this [PdfForm].
     #[inline]
     pub fn bindings(&self) -> &'a dyn PdfiumLibraryBindings {

@@ -523,8 +523,6 @@ mod tests {
         assert!(samples.len() > 0);
 
         for sample in samples {
-            println!("Testing all text objects in file {}", sample.display());
-
             let document = pdfium.load_pdf_from_file(&sample, None)?;
 
             for page in document.pages().iter() {

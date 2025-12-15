@@ -84,6 +84,45 @@ impl PdfFormFieldType {
             PdfFormFieldType::Signature => FPDF_FORMFIELD_SIGNATURE,
         }
     }
+
+    /// Maps this form field type to its base PDF field type string.
+    ///
+    /// The PDF specification defines 4 base field types (`/FT` key), but Pdfium distinguishes
+    /// 8 widget display types. This method returns the base type string needed for creating
+    /// widget annotations.
+    ///
+    /// Returns "Tx" for Text, "Btn" for Button types, "Ch" for Choice types, "Sig" for Signature,
+    /// or an error for Unknown type.
+    #[cfg(feature = "pdfium_future")]
+    pub fn to_base_type_string(&self) -> Result<&'static str, PdfiumError> {
+        match self {
+            PdfFormFieldType::Text => Ok("Tx"),
+            PdfFormFieldType::PushButton | PdfFormFieldType::Checkbox | PdfFormFieldType::RadioButton => Ok("Btn"),
+            PdfFormFieldType::ComboBox | PdfFormFieldType::ListBox => Ok("Ch"),
+            PdfFormFieldType::Signature => Ok("Sig"),
+            PdfFormFieldType::Unknown => Err(PdfiumError::UnknownFormFieldType),
+        }
+    }
+
+    /// Returns the flags needed to configure this specific form field subtype.
+    ///
+    /// After creating a widget annotation with the base type, these flags must be set
+    /// to configure the specific subtype (e.g., PushButton vs Checkbox vs RadioButton).
+    ///
+    /// Returns `PdfFormFieldFlags::None` for types that don't require additional flags.
+    #[cfg(feature = "pdfium_future")]
+    pub fn required_flags(&self) -> PdfFormFieldFlags {
+        match self {
+            PdfFormFieldType::PushButton => PdfFormFieldFlags::ButtonIsPushButton,
+            PdfFormFieldType::RadioButton => PdfFormFieldFlags::ButtonIsRadio,
+            PdfFormFieldType::ComboBox => PdfFormFieldFlags::ChoiceCombo,
+            PdfFormFieldType::Text
+            | PdfFormFieldType::Checkbox
+            | PdfFormFieldType::ListBox
+            | PdfFormFieldType::Signature
+            | PdfFormFieldType::Unknown => PdfFormFieldFlags::None,
+        }
+    }
 }
 
 /// A single interactive form field in a [PdfForm].

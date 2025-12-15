@@ -82,6 +82,13 @@ extern "C" {
 #define FPDF_FORMFLAG_CHOICE_EDIT (1 << 18)
 #define FPDF_FORMFLAG_CHOICE_MULTI_SELECT (1 << 21)
 
+// Refer to PDF Reference version 1.7 table 8.76 for field flags specific to
+// interactive form button fields.
+#define FPDF_FORMFLAG_BTN_NOTOGGLETOOFF (1 << 14)
+#define FPDF_FORMFLAG_BTN_RADIO (1 << 15)
+#define FPDF_FORMFLAG_BTN_PUSHBUTTON (1 << 16)
+#define FPDF_FORMFLAG_BTN_RADIOSINUNISON (1 << 25)
+
 // Additional actions type of form field:
 //   K, on key stroke, JavaScript action.
 //   F, on format, JavaScript action.
@@ -132,6 +139,45 @@ FPDFAnnot_IsSupportedSubtype(FPDF_ANNOTATION_SUBTYPE subtype);
 // Returns a handle to the new annotation object, or NULL on failure.
 FPDF_EXPORT FPDF_ANNOTATION FPDF_CALLCONV
 FPDFPage_CreateAnnot(FPDF_PAGE page, FPDF_ANNOTATION_SUBTYPE subtype);
+
+// Experimental API.
+// Create a widget annotation (form field annotation) in |page|.
+// This creates both the form field dictionary and the widget annotation,
+// properly linking them together.
+//
+//   page              - Handle to the page.
+//   form_handle       - Handle to the form fill module (required).
+//   field_name        - The field name (/T key), encoded in UTF-8.
+//   field_type        - The field type (/FT key): "Tx" (text), "Btn" (button),
+//                       "Ch" (choice), or "Sig" (signature).
+//   rect              - Bounding rectangle for the widget annotation.
+//   field_flags       - The /Ff (field flags) value. Use to specify button
+//                       subtypes (checkbox/radio/push button), choice subtypes
+//                       (combo/list), and other field attributes. Use 0 for
+//                       default behavior.
+//   options           - Array of option strings for choice fields (NULL to skip).
+//   option_count      - Number of options (0 if options is NULL).
+//   max_length        - Maximum length for text fields (-1 to skip).
+//   quadding          - Text alignment: 0=left, 1=center, 2=right (-1 to skip).
+//   default_appearance - Default appearance string, e.g. "/Helv 12 Tf 0 0 0 rg"
+//                        (NULL to skip).
+//   default_value     - Default value string, UTF-16LE encoded (NULL to skip).
+//
+// Returns a handle to the created widget annotation, or NULL on failure.
+// Must call FPDFPage_CloseAnnot() when done.
+FPDF_EXPORT FPDF_ANNOTATION FPDF_CALLCONV
+FPDFPage_CreateWidgetAnnot(FPDF_PAGE page,
+                           FPDF_FORMHANDLE form_handle,
+                           FPDF_BYTESTRING field_name,
+                           FPDF_BYTESTRING field_type,
+                           const FS_RECTF* rect,
+                           int field_flags,
+                           const FPDF_WCHAR* const* options,
+                           size_t option_count,
+                           int max_length,
+                           int quadding,
+                           FPDF_BYTESTRING default_appearance,
+                           FPDF_WIDESTRING default_value);
 
 // Experimental API.
 // Get the number of annotations in |page|.
@@ -432,6 +478,20 @@ FPDFAnnot_GetVertices(FPDF_ANNOTATION annot,
                       unsigned long length);
 
 // Experimental API.
+// Set the vertices of a polyline or polygon annotation.
+// Sets the /Vertices dictionary entry to [v0.x, v0.y, v1.x, v1.y, ...].
+//
+//   annot    - handle to an annotation.
+//   vertices - array of points (must not be NULL).
+//   count    - number of points in the array (must be > 0).
+//
+// Returns the number of points set if successful, 0 otherwise.
+FPDF_EXPORT unsigned long FPDF_CALLCONV
+FPDFAnnot_SetVertices(FPDF_ANNOTATION annot,
+                      const FS_POINTF* vertices,
+                      unsigned long count);
+
+// Experimental API.
 // Get the number of paths in the ink list of an ink annotation.
 //
 //   annot  - handle to an annotation, as returned by e.g. FPDFPage_GetAnnot()
@@ -473,6 +533,19 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFAnnot_GetLine(FPDF_ANNOTATION annot,
                                                       FS_POINTF* end);
 
 // Experimental API.
+// Set the starting and ending coordinates of a line annotation.
+// Sets the /L dictionary entry to [start.x, start.y, end.x, end.y].
+//
+//   annot  - handle to an annotation.
+//   start  - starting point (must not be NULL).
+//   end    - ending point (must not be NULL).
+//
+// Returns true if successful.
+FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFAnnot_SetLine(FPDF_ANNOTATION annot,
+                                                      const FS_POINTF* start,
+                                                      const FS_POINTF* end);
+
+// Experimental API.
 // Set the characteristics of the annotation's border (rounded rectangle).
 //
 //   annot              - handle to an annotation
@@ -504,6 +577,65 @@ FPDFAnnot_GetBorder(FPDF_ANNOTATION annot,
                     float* horizontal_radius,
                     float* vertical_radius,
                     float* border_width);
+
+// Experimental API.
+// Get the border width from /BS/W.
+//
+//   annot  - handle to an annotation
+//   width  - pointer to receive the border width value
+//
+// Returns true if width is not NULL and the border width was successfully retrieved.
+FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFAnnot_GetBSWidth(FPDF_ANNOTATION annot, float* width);
+
+// Experimental API.
+// Set the border width in /BS/W.
+//
+//   annot  - handle to an annotation
+//   width  - border width value (must be >= 0.0)
+//
+// Returns true if setting the border width succeeds, false otherwise.
+FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFAnnot_SetBSWidth(FPDF_ANNOTATION annot, float width);
+
+// Experimental API.
+// Get the border style from /BS/S.
+//
+//   annot   - handle to an annotation
+//   buffer  - buffer to receive the style string (e.g., "S", "D", "B", "I", "U")
+//   buflen  - size of the buffer
+//
+// Returns the length of the style string (including null terminator) if successful, 0 otherwise.
+FPDF_EXPORT unsigned long FPDF_CALLCONV FPDFAnnot_GetBSStyle(FPDF_ANNOTATION annot, char* buffer, unsigned long buflen);
+
+// Experimental API.
+// Set the border style in /BS/S.
+//
+//   annot  - handle to an annotation
+//   style  - border style string (e.g., "S" for solid, "D" for dashed, "B" for beveled, "I" for inset, "U" for underline)
+//
+// Returns true if setting the border style succeeds, false otherwise.
+FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFAnnot_SetBSStyle(FPDF_ANNOTATION annot, FPDF_BYTESTRING style);
+
+// Experimental API.
+// Get the dash pattern from /BS/D.
+//
+//   annot  - handle to an annotation
+//   dash   - pointer to receive the dash length value
+//   gap    - pointer to receive the gap length value
+//   phase  - pointer to receive the phase value
+//
+// Returns true if dash, gap, and phase are not NULL and the dash pattern was successfully retrieved.
+FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFAnnot_GetBSDash(FPDF_ANNOTATION annot, float* dash, float* gap, float* phase);
+
+// Experimental API.
+// Set the dash pattern in /BS/D.
+//
+//   annot  - handle to an annotation
+//   dash   - dash length value (must be >= 0.0)
+//   gap    - gap length value (must be >= 0.0)
+//   phase  - phase value (must be >= 0.0)
+//
+// Returns true if setting the dash pattern succeeds, false otherwise.
+FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFAnnot_SetBSDash(FPDF_ANNOTATION annot, float dash, float gap, float phase);
 
 // Experimental API.
 // Get the JavaScript of an event of the annotation's additional actions.

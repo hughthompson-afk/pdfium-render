@@ -28,9 +28,6 @@ pub(crate) mod internal {
     use crate::pdf::rect::PdfRect;
     use std::os::raw::c_double;
 
-    #[cfg(any(feature = "pdfium_future", feature = "pdfium_7350"))]
-    use crate::pdf::document::page::objects::common::{PdfPageObjectIndex, PdfPageObjectsCommon};
-
     /// Internal crate-specific functionality common to all [PdfPageObject] objects.
     pub(crate) trait PdfPageObjectPrivate<'a>: PdfPageObjectCommon<'a> {
         /// Returns the [PdfiumLibraryBindings] used by this [PdfPageObject].

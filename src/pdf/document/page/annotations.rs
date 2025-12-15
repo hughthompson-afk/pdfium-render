@@ -4,13 +4,20 @@
 use crate::bindgen::{FPDF_ANNOTATION, FPDF_DOCUMENT, FPDF_FORMHANDLE, FPDF_PAGE};
 use crate::bindings::PdfiumLibraryBindings;
 use crate::error::{PdfiumError, PdfiumInternalError};
+#[cfg(target_arch = "wasm32")]
+use js_sys;
 use crate::pdf::color::PdfColor;
+use crate::pdf::document::page::annotation::caret::PdfPageCaretAnnotation;
 use crate::pdf::document::page::annotation::circle::PdfPageCircleAnnotation;
+use crate::pdf::document::page::annotation::file_attachment::PdfPageFileAttachmentAnnotation;
 use crate::pdf::document::page::annotation::free_text::PdfPageFreeTextAnnotation;
 use crate::pdf::document::page::annotation::highlight::PdfPageHighlightAnnotation;
 use crate::pdf::document::page::annotation::ink::PdfPageInkAnnotation;
+use crate::pdf::document::page::annotation::line::PdfPageLineAnnotation;
 use crate::pdf::document::page::annotation::link::PdfPageLinkAnnotation;
 use crate::pdf::document::page::annotation::popup::PdfPagePopupAnnotation;
+use crate::pdf::document::page::annotation::polygon::PdfPagePolygonAnnotation;
+use crate::pdf::document::page::annotation::polyline::PdfPagePolylineAnnotation;
 use crate::pdf::document::page::annotation::private::internal::PdfPageAnnotationPrivate;
 use crate::pdf::document::page::annotation::square::PdfPageSquareAnnotation;
 use crate::pdf::document::page::annotation::squiggly::PdfPageSquigglyAnnotation;
@@ -18,9 +25,20 @@ use crate::pdf::document::page::annotation::stamp::PdfPageStampAnnotation;
 use crate::pdf::document::page::annotation::strikeout::PdfPageStrikeoutAnnotation;
 use crate::pdf::document::page::annotation::text::PdfPageTextAnnotation;
 use crate::pdf::document::page::annotation::underline::PdfPageUnderlineAnnotation;
+use crate::pdf::document::page::annotation::watermark::PdfPageWatermarkAnnotation;
+#[cfg(feature = "pdfium_future")]
+use crate::pdf::document::page::annotation::widget::PdfPageWidgetAnnotation;
 use crate::pdf::document::page::annotation::{
     PdfPageAnnotation, PdfPageAnnotationCommon, PdfPageAnnotationType,
 };
+#[cfg(feature = "pdfium_future")]
+use crate::pdf::document::page::field::PdfFormFieldType;
+#[cfg(feature = "pdfium_future")]
+use crate::pdf::document::page::field::private::internal::PdfFormFieldFlags;
+#[cfg(feature = "pdfium_future")]
+use crate::pdf::rect::PdfRect;
+#[cfg(feature = "pdfium_future")]
+use std::ffi::CString;
 use crate::pdf::document::page::object::{PdfPageObject, PdfPageObjectCommon};
 use crate::pdf::document::page::{PdfPage, PdfPageContentRegenerationStrategy, PdfPageIndexCache};
 use crate::pdf::quad_points::PdfQuadPoints;
@@ -161,15 +179,71 @@ impl<'a> PdfPageAnnotations<'a> {
             &'a dyn PdfiumLibraryBindings,
         ) -> T,
     ) -> Result<T, PdfiumError> {
+        #[cfg(target_arch = "wasm32")]
+        {
+            use web_sys::console;
+            console::log_1(&"═══════════════════════════════════════════════════════════".into());
+            console::log_1(&format!("🔧 create_annotation() - Creating {:?} annotation", annotation_type).into());
+            console::log_1(&"═══════════════════════════════════════════════════════════".into());
+            console::log_1(&format!("   Page handle: {:?}", self.page_handle()).into());
+            console::log_1(&format!("   Document handle: {:?}", self.document_handle()).into());
+            console::log_1(&format!("   Annotation type PDFium value: {}", annotation_type.as_pdfium()).into());
+        }
+
+        // Check if this annotation type is supported for creation
+        let is_supported = self
+            .bindings()
+            .FPDFAnnot_IsSupportedSubtype(annotation_type.as_pdfium());
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            use web_sys::console;
+            console::log_1(&format!("   FPDFAnnot_IsSupportedSubtype returned: {} (1=supported, 0=not supported)", is_supported).into());
+            console::log_1(&format!("   is_true(is_supported): {}", self.bindings().is_true(is_supported)).into());
+        }
+
+        if !self.bindings().is_true(is_supported) {
+            #[cfg(target_arch = "wasm32")]
+            {
+                use web_sys::console;
+                console::log_1(&"❌ ERROR: Annotation type is NOT supported for creation by PDFium".into());
+                console::log_1(&format!("   {:?} annotations cannot be created via FPDFPage_CreateAnnot", annotation_type).into());
+                console::log_1(&"   This annotation type may need to be created differently or is not supported in this PDFium version".into());
+                console::log_1(&"═══════════════════════════════════════════════════════════".into());
+            }
+            return Err(PdfiumError::PdfiumLibraryInternalError(
+                PdfiumInternalError::Unknown,
+            ));
+        }
+
         let handle = self
             .bindings()
             .FPDFPage_CreateAnnot(self.page_handle(), annotation_type.as_pdfium());
 
+        #[cfg(target_arch = "wasm32")]
+        {
+            use web_sys::console;
+            console::log_1(&format!("   FPDFPage_CreateAnnot returned handle: {:?}", handle).into());
+            console::log_1(&format!("   Handle is null: {}", handle.is_null()).into());
+        }
+
         if handle.is_null() {
+            #[cfg(target_arch = "wasm32")]
+            {
+                use web_sys::console;
+                console::log_1(&"❌ ERROR: FPDFPage_CreateAnnot returned NULL handle".into());
+                console::log_1(&format!("   This means PDFium failed to create the {:?} annotation", annotation_type).into());
+            }
             Err(PdfiumError::PdfiumLibraryInternalError(
                 PdfiumInternalError::Unknown,
             ))
         } else {
+            #[cfg(target_arch = "wasm32")]
+            {
+                use web_sys::console;
+                console::log_1(&"✅ FPDFPage_CreateAnnot succeeded, calling constructor".into());
+            }
+
             let mut annotation = constructor(
                 self.document_handle(),
                 self.page_handle(),
@@ -177,30 +251,72 @@ impl<'a> PdfPageAnnotations<'a> {
                 self.bindings(),
             );
 
-            annotation
-                .set_creation_date(Utc::now())
-                .and_then(|()| {
-                    if let Some(content_regeneration_strategy) =
-                        PdfPageIndexCache::get_content_regeneration_strategy_for_page(
-                            self.document_handle(),
-                            self.page_handle(),
-                        )
+            #[cfg(target_arch = "wasm32")]
+            {
+                use web_sys::console;
+                console::log_1(&"✅ Constructor succeeded, setting creation date".into());
+            }
+
+            let creation_date_result = annotation.set_creation_date(Utc::now());
+
+            #[cfg(target_arch = "wasm32")]
+            {
+                use web_sys::console;
+                match &creation_date_result {
+                    Ok(_) => console::log_1(&"✅ set_creation_date succeeded".into()),
+                    Err(e) => console::log_1(&format!("❌ set_creation_date failed: {:?}", e).into()),
+                }
+            }
+
+            let content_regeneration_result = creation_date_result.and_then(|()| {
+                if let Some(content_regeneration_strategy) =
+                    PdfPageIndexCache::get_content_regeneration_strategy_for_page(
+                        self.document_handle(),
+                        self.page_handle(),
+                    )
+                {
+                    #[cfg(target_arch = "wasm32")]
                     {
-                        if content_regeneration_strategy
-                            == PdfPageContentRegenerationStrategy::AutomaticOnEveryChange
-                        {
-                            PdfPage::regenerate_content_immut_for_handle(
-                                self.page_handle(),
-                                self.bindings(),
-                            )
-                        } else {
-                            Ok(())
-                        }
-                    } else {
-                        Err(PdfiumError::SourcePageIndexNotInCache)
+                        use web_sys::console;
+                        console::log_1(&format!("   Content regeneration strategy: {:?}", content_regeneration_strategy).into());
                     }
-                })
-                .map(|()| annotation)
+
+                    if content_regeneration_strategy
+                        == PdfPageContentRegenerationStrategy::AutomaticOnEveryChange
+                    {
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            use web_sys::console;
+                            console::log_1(&"   Triggering content regeneration".into());
+                        }
+                        PdfPage::regenerate_content_immut_for_handle(
+                            self.page_handle(),
+                            self.bindings(),
+                        )
+                    } else {
+                        Ok(())
+                    }
+                } else {
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        use web_sys::console;
+                        console::log_1(&"❌ ERROR: SourcePageIndexNotInCache".into());
+                    }
+                    Err(PdfiumError::SourcePageIndexNotInCache)
+                }
+            });
+
+            #[cfg(target_arch = "wasm32")]
+            {
+                use web_sys::console;
+                match &content_regeneration_result {
+                    Ok(_) => console::log_1(&"✅ Annotation creation completed successfully".into()),
+                    Err(e) => console::log_1(&format!("❌ Content regeneration failed: {:?}", e).into()),
+                }
+                console::log_1(&"═══════════════════════════════════════════════════════════".into());
+            }
+
+            content_regeneration_result.map(|()| annotation)
         }
     }
 
@@ -398,6 +514,333 @@ impl<'a> PdfPageAnnotations<'a> {
             PdfPageAnnotationType::Underline,
             PdfPageUnderlineAnnotation::from_pdfium,
         )
+    }
+
+    /// Creates a new [PdfPageCaretAnnotation] annotation in this [PdfPageAnnotations] collection,
+    /// returning the newly created annotation.
+    ///
+    /// If the containing `PdfPage` has a content regeneration strategy of
+    /// `PdfPageContentRegenerationStrategy::AutomaticOnEveryChange` then content regeneration
+    /// will be triggered on the page.
+    #[inline]
+    pub fn create_caret_annotation(&mut self) -> Result<PdfPageCaretAnnotation<'a>, PdfiumError> {
+        self.create_annotation(
+            PdfPageAnnotationType::Caret,
+            PdfPageCaretAnnotation::from_pdfium,
+        )
+    }
+
+    /// Creates a new [PdfPageFileAttachmentAnnotation] annotation in this [PdfPageAnnotations] collection,
+    /// returning the newly created annotation.
+    ///
+    /// If the containing `PdfPage` has a content regeneration strategy of
+    /// `PdfPageContentRegenerationStrategy::AutomaticOnEveryChange` then content regeneration
+    /// will be triggered on the page.
+    #[inline]
+    pub fn create_file_attachment_annotation(
+        &mut self,
+    ) -> Result<PdfPageFileAttachmentAnnotation<'a>, PdfiumError> {
+        self.create_annotation(
+            PdfPageAnnotationType::FileAttachment,
+            PdfPageFileAttachmentAnnotation::from_pdfium,
+        )
+    }
+
+    /// Creates a new [PdfPageLineAnnotation] annotation in this [PdfPageAnnotations] collection,
+    /// returning the newly created annotation.
+    ///
+    /// If the containing `PdfPage` has a content regeneration strategy of
+    /// `PdfPageContentRegenerationStrategy::AutomaticOnEveryChange` then content regeneration
+    /// will be triggered on the page.
+    #[inline]
+    pub fn create_line_annotation(&mut self) -> Result<PdfPageLineAnnotation<'a>, PdfiumError> {
+        self.create_annotation(
+            PdfPageAnnotationType::Line,
+            PdfPageLineAnnotation::from_pdfium,
+        )
+    }
+
+    /// Creates a new [PdfPagePolygonAnnotation] annotation in this [PdfPageAnnotations] collection,
+    /// returning the newly created annotation.
+    ///
+    /// If the containing `PdfPage` has a content regeneration strategy of
+    /// `PdfPageContentRegenerationStrategy::AutomaticOnEveryChange` then content regeneration
+    /// will be triggered on the page.
+    #[inline]
+    pub fn create_polygon_annotation(
+        &mut self,
+    ) -> Result<PdfPagePolygonAnnotation<'a>, PdfiumError> {
+        self.create_annotation(
+            PdfPageAnnotationType::Polygon,
+            PdfPagePolygonAnnotation::from_pdfium,
+        )
+    }
+
+    /// Creates a new [PdfPagePolylineAnnotation] annotation in this [PdfPageAnnotations] collection,
+    /// returning the newly created annotation.
+    ///
+    /// If the containing `PdfPage` has a content regeneration strategy of
+    /// `PdfPageContentRegenerationStrategy::AutomaticOnEveryChange` then content regeneration
+    /// will be triggered on the page.
+    #[inline]
+    pub fn create_polyline_annotation(
+        &mut self,
+    ) -> Result<PdfPagePolylineAnnotation<'a>, PdfiumError> {
+        self.create_annotation(
+            PdfPageAnnotationType::Polyline,
+            PdfPagePolylineAnnotation::from_pdfium,
+        )
+    }
+
+    /// Creates a new [PdfPageWatermarkAnnotation] annotation in this [PdfPageAnnotations] collection,
+    /// returning the newly created annotation.
+    ///
+    /// If the containing `PdfPage` has a content regeneration strategy of
+    /// `PdfPageContentRegenerationStrategy::AutomaticOnEveryChange` then content regeneration
+    /// will be triggered on the page.
+    #[inline]
+    pub fn create_watermark_annotation(
+        &mut self,
+    ) -> Result<PdfPageWatermarkAnnotation<'a>, PdfiumError> {
+        self.create_annotation(
+            PdfPageAnnotationType::Watermark,
+            PdfPageWatermarkAnnotation::from_pdfium,
+        )
+    }
+
+    /// Creates a new [PdfPageWidgetAnnotation] (form field annotation) in this [PdfPageAnnotations]
+    /// collection, returning the newly created annotation.
+    ///
+    /// This creates both the form field dictionary and the widget annotation, properly linking
+    /// them together. The widget annotation represents an interactive form field (text field,
+    /// checkbox, radio button, etc.).
+    ///
+    /// # Arguments
+    ///
+    /// * `form_handle` - Handle to the form fill module (required).
+    /// * `field_name` - The field name (e.g., "MyTextField").
+    /// * `field_type` - The type of form field to create.
+    /// * `rect` - Bounding rectangle for the widget annotation.
+    /// * `options` - Optional list of options for ComboBox/ListBox fields.
+    /// * `max_length` - Optional maximum length for text fields.
+    /// * `quadding` - Optional text alignment (0=left, 1=center, 2=right).
+    /// * `default_appearance` - Optional default appearance string.
+    /// * `default_value` - Optional default value.
+    /// * `additional_flags` - Optional additional form field flags to set. These are combined
+    ///   with the required flags for the field type. Common flags include:
+    ///   - Common: READONLY (1), REQUIRED (2), NOEXPORT (4)
+    ///   - Text: MULTILINE (1<<12), PASSWORD (1<<13)
+    ///   - Button: NOTOGGLETOOFF (1<<14), RADIO (1<<15), PUSHBUTTON (1<<16), RADIOSINUNISON (1<<25)
+    ///   - Choice: COMBO (1<<17), EDIT (1<<18), MULTI_SELECT (1<<21)
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(PdfPageWidgetAnnotation)` if successful, or an error if the operation fails.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use pdfium_render::prelude::*;
+    ///
+    /// let pdfium = Pdfium::new();
+    /// let mut document = pdfium.create_new_pdf().unwrap();
+    /// document.ensure_acro_form().unwrap();
+    ///
+    /// let mut page = document.pages_mut().create_page_at_start(
+    ///     PdfPagePaperSize::a4().width,
+    ///     PdfPagePaperSize::a4().height,
+    /// ).unwrap();
+    ///
+    /// let form_handle = page.form_handle().unwrap();
+    /// let rect = PdfRect::new(100.0, 700.0, 200.0, 720.0);
+    ///
+    /// // Create a required, multiline text field
+    /// let flags = Some(2 | (1 << 12)); // REQUIRED | MULTILINE
+    /// let widget = page.annotations_mut().create_widget_annotation(
+    ///     form_handle,
+    ///     "MyTextField",
+    ///     PdfFormFieldType::Text,
+    ///     rect,
+    ///     None, None, None, None, None,
+    ///     flags,
+    /// ).unwrap();
+    /// ```
+    ///
+    /// If the containing `PdfPage` has a content regeneration strategy of
+    /// `PdfPageContentRegenerationStrategy::AutomaticOnEveryChange` then content regeneration
+    /// will be triggered on the page.
+    #[cfg(feature = "pdfium_future")]
+    pub fn create_widget_annotation(
+        &mut self,
+        form_handle: FPDF_FORMHANDLE,
+        field_name: &str,
+        field_type: PdfFormFieldType,
+        rect: PdfRect,
+        options: Option<&[&str]>,
+        max_length: Option<i32>,
+        quadding: Option<i32>,
+        default_appearance: Option<&str>,
+        default_value: Option<&str>,
+        additional_flags: Option<u32>,
+    ) -> Result<PdfPageWidgetAnnotation<'a>, PdfiumError> {
+        use crate::utils::utf16le::get_pdfium_utf16le_bytes_from_str;
+        use std::os::raw::c_ushort;
+
+        // Validate that field_type is not Unknown
+        if field_type == PdfFormFieldType::Unknown {
+            return Err(PdfiumError::UnknownFormFieldType);
+        }
+
+        // Convert field_name to C string
+        let field_name_cstr = CString::new(field_name)
+            .map_err(|_| PdfiumError::PdfiumLibraryInternalError(
+                PdfiumInternalError::Unknown,
+            ))?;
+
+        // Get base type string and convert to C string
+        let base_type_str = field_type.to_base_type_string()?;
+        let field_type_cstr = CString::new(base_type_str)
+            .map_err(|_| PdfiumError::PdfiumLibraryInternalError(
+                PdfiumInternalError::Unknown,
+            ))?;
+
+        // Convert rect to FS_RECTF
+        let fs_rect = self.bindings().get_fs_rect_from_rect(&rect);
+
+        // Handle options array if provided
+        // For WASM, we need to pass the bytes directly, not pointers to Rust memory
+        // Store the bytes in WASM state so bindings can copy them to PDFium memory
+        let (options_ptr, option_count, _option_bytes, _option_ptrs) = if let Some(opts) = options {
+            // Convert each option string to UTF-16LE bytes
+            let option_bytes: Vec<Vec<u8>> = opts
+                .iter()
+                .map(|s| get_pdfium_utf16le_bytes_from_str(s))
+                .collect();
+
+            let option_count = option_bytes.len();
+            
+            // Store the bytes in WASM state for the bindings to access
+            #[cfg(target_arch = "wasm32")]
+            {
+                use crate::bindings::wasm::PdfiumRenderWasmState;
+                use js_sys::Array as JsArray;
+                use wasm_bindgen::JsValue;
+                // Get write access to store the bytes
+                let mut state = PdfiumRenderWasmState::lock_mut();
+                // Convert Vec<Vec<u8>> to JavaScript Array of Uint8Arrays
+                let js_array = JsArray::new();
+                for bytes_vec in &option_bytes {
+                    let uint8_array = js_sys::Uint8Array::new_with_length(bytes_vec.len() as u32);
+                    uint8_array.copy_from(bytes_vec);
+                    js_array.push(&uint8_array.into());
+                }
+                // Store the array in state using the public set method
+                state.set("__widget_annotation_options", js_array.into());
+            }
+            
+            // Create dummy pointers - the WASM bindings will use the stored bytes instead
+            let option_ptrs: Vec<*const c_ushort> = vec![std::ptr::null(); option_count];
+            let options_ptr = option_ptrs.as_ptr();
+
+            (options_ptr, option_count, Some(option_bytes), Some(option_ptrs))
+        } else {
+            (std::ptr::null(), 0, None, None)
+        };
+
+        // Handle max_length
+        let max_length_val = max_length.unwrap_or(-1);
+
+        // Handle quadding
+        let quadding_val = quadding.unwrap_or(-1);
+
+        // Handle default_appearance
+        let default_appearance_cstr = if let Some(appearance) = default_appearance {
+            Some(CString::new(appearance)
+                .map_err(|_| PdfiumError::PdfiumLibraryInternalError(
+                    PdfiumInternalError::Unknown,
+                ))?)
+        } else {
+            None
+        };
+        let default_appearance_ptr = default_appearance_cstr
+            .as_ref()
+            .map(|s| s.as_ptr())
+            .unwrap_or(std::ptr::null());
+
+        // Handle default_value
+        let default_value_bytes = if let Some(value) = default_value {
+            Some(get_pdfium_utf16le_bytes_from_str(value))
+        } else {
+            None
+        };
+        let default_value_ptr = default_value_bytes
+            .as_ref()
+            .map(|bytes| bytes.as_ptr() as *const c_ushort)
+            .unwrap_or(std::ptr::null());
+
+        // Compute field flags from the field type
+        // This sets the /Ff (field flags) value at creation time to properly configure
+        // button subtypes (checkbox/radio/push button), choice subtypes (combo/list), etc.
+        let mut flags = field_type.required_flags();
+        
+        // Merge in any additional flags provided by the caller
+        if let Some(extra) = additional_flags {
+            flags |= PdfFormFieldFlags::from_bits_truncate(extra);
+        }
+        
+        let field_flags_val = flags.bits() as c_int;
+
+        // Create the widget annotation
+        // The _option_bytes, _option_ptrs, default_appearance_cstr, and default_value_bytes
+        // are kept alive for the duration of this call
+        let annot_handle = self.bindings().FPDFPage_CreateWidgetAnnot(
+            self.page_handle(),
+            form_handle,
+            field_name_cstr.as_ptr(),
+            field_type_cstr.as_ptr(),
+            &fs_rect,
+            field_flags_val,
+            options_ptr,
+            option_count,
+            max_length_val,
+            quadding_val,
+            default_appearance_ptr,
+            default_value_ptr,
+        );
+
+        if annot_handle.is_null() {
+            return Err(PdfiumError::PdfiumLibraryInternalError(
+                PdfiumInternalError::Unknown,
+            ));
+        }
+
+        // Wrap in PdfPageWidgetAnnotation
+        let annotation = PdfPageWidgetAnnotation::from_pdfium(
+            self.document_handle(),
+            self.page_handle(),
+            annot_handle,
+            Some(form_handle),
+            self.bindings(),
+        );
+
+        // Handle content regeneration if needed
+        if let Some(content_regeneration_strategy) =
+            PdfPageIndexCache::get_content_regeneration_strategy_for_page(
+                self.document_handle(),
+                self.page_handle(),
+            )
+        {
+            if content_regeneration_strategy
+                == PdfPageContentRegenerationStrategy::AutomaticOnEveryChange
+            {
+                PdfPage::regenerate_content_immut_for_handle(
+                    self.page_handle(),
+                    self.bindings(),
+                )?;
+            }
+        }
+
+        Ok(annotation)
     }
 
     // Convenience functions for creating and positioning markup annotations

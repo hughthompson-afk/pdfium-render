@@ -14,7 +14,7 @@ pub mod permissions;
 pub mod signature;
 pub mod signatures;
 
-use crate::bindgen::FPDF_DOCUMENT;
+use crate::bindgen::{FPDF_DOCUMENT, FPDF_FORMHANDLE};
 use crate::bindings::PdfiumLibraryBindings;
 use crate::error::PdfiumError;
 use crate::error::PdfiumInternalError;
@@ -211,6 +211,121 @@ impl<'a> PdfDocument<'a> {
         self.bindings
     }
 
+    /// Ensures the document has an /AcroForm dictionary in its catalog.
+    /// Creates one if it doesn't exist.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if AcroForm exists or was successfully created,
+    /// or an error if the operation fails.
+    #[cfg(feature = "pdfium_future")]
+    pub fn ensure_acro_form(&self) -> Result<(), PdfiumError> {
+        if !self.bindings.is_true(self.bindings.FPDF_EnsureAcroForm(self.handle())) {
+            return Err(PdfiumError::PdfiumLibraryInternalError(
+                PdfiumInternalError::Unknown,
+            ));
+        }
+        Ok(())
+    }
+
+    /// Initializes the form fill environment for this document and returns the form handle.
+    /// This is required before creating widget annotations in new documents.
+    ///
+    /// If the form fill environment is already initialized, returns the existing form handle.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(FPDF_FORMHANDLE)` if successful, or an error if initialization fails.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use pdfium_render::prelude::*;
+    ///
+    /// let pdfium = Pdfium::new();
+    /// let mut document = pdfium.create_new_pdf()?;
+    /// document.ensure_acro_form()?;
+    ///
+    /// let form_handle = document.init_form_fill_environment()?;
+    /// // Now you can create widget annotations using form_handle
+    /// ```
+    #[cfg(feature = "pdfium_future")]
+    pub fn init_form_fill_environment(&mut self) -> Result<FPDF_FORMHANDLE, PdfiumError> {
+        use crate::bindgen::FPDF_FORMFILLINFO;
+        use crate::pdf::document::form::PdfForm;
+        use std::ops::DerefMut;
+        use std::ptr::null_mut;
+
+        // If form is already initialized, return its handle
+        if let Some(form) = &self.form {
+            return Ok(form.handle());
+        }
+
+        // Initialize form fill environment (similar to PdfForm::from_pdfium)
+        let mut form_fill_info = Box::pin(FPDF_FORMFILLINFO {
+            version: 2,
+            Release: None,
+            FFI_Invalidate: None,
+            FFI_OutputSelectedRect: None,
+            FFI_SetCursor: None,
+            FFI_SetTimer: None,
+            FFI_KillTimer: None,
+            FFI_GetLocalTime: None,
+            FFI_OnChange: None,
+            FFI_GetPage: None,
+            FFI_GetCurrentPage: None,
+            FFI_GetRotation: None,
+            FFI_ExecuteNamedAction: None,
+            FFI_SetTextFieldFocus: None,
+            FFI_DoURIAction: None,
+            FFI_DoGoToAction: None,
+            m_pJsPlatform: null_mut(),
+            xfa_disabled: 0,
+            FFI_DisplayCaret: None,
+            FFI_GetCurrentPageIndex: None,
+            FFI_SetCurrentPage: None,
+            FFI_GotoURL: None,
+            FFI_GetPageViewRect: None,
+            FFI_PageEvent: None,
+            FFI_PopupMenu: None,
+            FFI_OpenFile: None,
+            FFI_EmailTo: None,
+            FFI_UploadTo: None,
+            FFI_GetPlatform: None,
+            FFI_GetLanguage: None,
+            FFI_DownloadFromURL: None,
+            FFI_PostRequestURL: None,
+            FFI_PutRequestURL: None,
+            FFI_OnFocusChange: None,
+            FFI_DoURIActionWithKeyboardModifier: None,
+        });
+
+        let form_handle = self.bindings.FPDFDOC_InitFormFillEnvironment(
+            self.handle(),
+            form_fill_info.as_mut().deref_mut(),
+        );
+
+        if form_handle.is_null() {
+            Err(PdfiumError::PdfiumLibraryInternalError(
+                PdfiumInternalError::Unknown,
+            ))
+        } else {
+            // Store the form (even if form_type is None) so form_fill_info stays alive
+            // We need to create a PdfForm to manage the lifetime of form_fill_info
+            let form = PdfForm::new(
+                form_handle,
+                self.handle(),
+                form_fill_info,
+                self.bindings,
+            );
+
+            // Store it in the document
+            self.form = Some(form);
+
+            Ok(form_handle)
+        }
+    }
+
     /// Transfers ownership of the byte buffer containing the binary data of this [PdfDocument],
     /// so that it will always be available for Pdfium to read data from as needed.
     #[inline]
@@ -311,12 +426,15 @@ impl<'a> PdfDocument<'a> {
 
     /// Writes this [PdfDocument] to the given writer.
     pub fn save_to_writer<W: Write + 'static>(&self, writer: &mut W) -> Result<(), PdfiumError> {
-        // TODO: AJRC - 25/5/22 - investigate supporting the FPDF_INCREMENTAL, FPDF_NO_INCREMENTAL,
-        // and FPDF_REMOVE_SECURITY flags defined in fpdf_save.h. There's not a lot of information
-        // on what they actually do, however.
-        // Some small info at https://forum.patagames.com/posts/t155-PDF-SaveFlags.
+        // FPDF_NO_INCREMENTAL (2) forces a complete rewrite of the document,
+        // which is needed to persist annotation appearance stream changes.
+        // Without this flag, modifications to annotation AP dictionaries may not be saved.
+        // See: https://forum.patagames.com/posts/t155-PDF-SaveFlags
+        const FPDF_NO_INCREMENTAL: u32 = 2;
 
-        let flags = 0;
+        // Use platform-appropriate type via bindgen's FPDF_DWORD (c_ulong)
+        // The value is small enough to fit in any integer type
+        let flags = FPDF_NO_INCREMENTAL as std::os::raw::c_ulong;
 
         let mut pdfium_file_writer = get_pdfium_file_writer_from_writer(writer);
 

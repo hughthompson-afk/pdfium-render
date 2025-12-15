@@ -7,74 +7,76 @@ mod bindgen {
     #![allow(dead_code)]
 
     // Select the Pdfium FPDF_* API version to use based on crate feature flags.
+    // Note: pdfium_future is mutually exclusive with all other pdfium version features
+    // to avoid duplicate constant definitions.
 
     #[cfg(feature = "pdfium_future")]
     include!("bindgen/pdfium_future.rs");
 
-    #[cfg(feature = "pdfium_7543")]
+    #[cfg(all(feature = "pdfium_7543", not(feature = "pdfium_future")))]
     include!("bindgen/pdfium_7543.rs");
 
-    #[cfg(feature = "pdfium_7350")]
+    #[cfg(all(feature = "pdfium_7350", not(feature = "pdfium_future")))]
     include!("bindgen/pdfium_7350.rs");
 
-    #[cfg(feature = "pdfium_7215")]
+    #[cfg(all(feature = "pdfium_7215", not(feature = "pdfium_future")))]
     include!("bindgen/pdfium_7215.rs");
 
-    #[cfg(feature = "pdfium_7123")]
+    #[cfg(all(feature = "pdfium_7123", not(feature = "pdfium_future")))]
     include!("bindgen/pdfium_7123.rs");
 
-    #[cfg(feature = "pdfium_6996")]
+    #[cfg(all(feature = "pdfium_6996", not(feature = "pdfium_future")))]
     include!("bindgen/pdfium_6996.rs");
 
-    #[cfg(feature = "pdfium_6721")]
+    #[cfg(all(feature = "pdfium_6721", not(feature = "pdfium_future")))]
     include!("bindgen/pdfium_6721.rs");
 
-    #[cfg(feature = "pdfium_6666")]
+    #[cfg(all(feature = "pdfium_6666", not(feature = "pdfium_future")))]
     include!("bindgen/pdfium_6666.rs");
 
-    #[cfg(feature = "pdfium_6611")]
+    #[cfg(all(feature = "pdfium_6611", not(feature = "pdfium_future")))]
     include!("bindgen/pdfium_6611.rs");
 
-    #[cfg(feature = "pdfium_6569")]
+    #[cfg(all(feature = "pdfium_6569", not(feature = "pdfium_future")))]
     include!("bindgen/pdfium_6569.rs");
 
-    #[cfg(feature = "pdfium_6555")]
+    #[cfg(all(feature = "pdfium_6555", not(feature = "pdfium_future")))]
     include!("bindgen/pdfium_6555.rs");
 
-    #[cfg(feature = "pdfium_6490")]
+    #[cfg(all(feature = "pdfium_6490", not(feature = "pdfium_future")))]
     include!("bindgen/pdfium_6490.rs");
 
-    #[cfg(feature = "pdfium_6406")]
+    #[cfg(all(feature = "pdfium_6406", not(feature = "pdfium_future")))]
     include!("bindgen/pdfium_6406.rs");
 
-    #[cfg(feature = "pdfium_6337")]
+    #[cfg(all(feature = "pdfium_6337", not(feature = "pdfium_future")))]
     include!("bindgen/pdfium_6337.rs");
 
-    #[cfg(feature = "pdfium_6295")]
+    #[cfg(all(feature = "pdfium_6295", not(feature = "pdfium_future")))]
     include!("bindgen/pdfium_6295.rs");
 
-    #[cfg(feature = "pdfium_6259")]
+    #[cfg(all(feature = "pdfium_6259", not(feature = "pdfium_future")))]
     include!("bindgen/pdfium_6259.rs");
 
-    #[cfg(feature = "pdfium_6164")]
+    #[cfg(all(feature = "pdfium_6164", not(feature = "pdfium_future")))]
     include!("bindgen/pdfium_6164.rs");
 
-    #[cfg(feature = "pdfium_6124")]
+    #[cfg(all(feature = "pdfium_6124", not(feature = "pdfium_future")))]
     include!("bindgen/pdfium_6124.rs");
 
-    #[cfg(feature = "pdfium_6110")]
+    #[cfg(all(feature = "pdfium_6110", not(feature = "pdfium_future")))]
     include!("bindgen/pdfium_6110.rs");
 
-    #[cfg(feature = "pdfium_6084")]
+    #[cfg(all(feature = "pdfium_6084", not(feature = "pdfium_future")))]
     include!("bindgen/pdfium_6084.rs");
 
-    #[cfg(feature = "pdfium_6043")]
+    #[cfg(all(feature = "pdfium_6043", not(feature = "pdfium_future")))]
     include!("bindgen/pdfium_6043.rs");
 
-    #[cfg(feature = "pdfium_6015")]
+    #[cfg(all(feature = "pdfium_6015", not(feature = "pdfium_future")))]
     include!("bindgen/pdfium_6015.rs");
 
-    #[cfg(feature = "pdfium_5961")]
+    #[cfg(all(feature = "pdfium_5961", not(feature = "pdfium_future")))]
     include!("bindgen/pdfium_5961.rs");
 
     pub(crate) type size_t = usize;
@@ -113,14 +115,20 @@ pub mod prelude {
         pdf::document::form::*,
         pdf::document::metadata::*,
         pdf::document::page::annotation::attachment_points::*,
+        pdf::document::page::annotation::caret::*,
         pdf::document::page::annotation::circle::*,
+        pdf::document::page::annotation::file_attachment::*,
         pdf::document::page::annotation::free_text::*,
         pdf::document::page::annotation::highlight::*,
         pdf::document::page::annotation::ink::*,
+        pdf::document::page::annotation::line::*,
         pdf::document::page::annotation::link::*,
         pdf::document::page::annotation::objects::*,
         pdf::document::page::annotation::popup::*,
+        pdf::document::page::annotation::polygon::*,
+        pdf::document::page::annotation::polyline::*,
         pdf::document::page::annotation::redacted::*,
+        pdf::document::page::annotation::signature_appearance::*,
         pdf::document::page::annotation::square::*,
         pdf::document::page::annotation::squiggly::*,
         pdf::document::page::annotation::stamp::*,
@@ -129,6 +137,7 @@ pub mod prelude {
         pdf::document::page::annotation::underline::*,
         pdf::document::page::annotation::unsupported::*,
         pdf::document::page::annotation::variable_text::*,
+        pdf::document::page::annotation::watermark::*,
         pdf::document::page::annotation::widget::*,
         pdf::document::page::annotation::xfa_widget::*,
         pdf::document::page::annotation::{
@@ -301,8 +310,6 @@ mod tests {
 
                 // reader will be dropped here, immediately after document.
             };
-
-            println!("{} has {} pages", path, page_count);
         }
 
         Ok(())
