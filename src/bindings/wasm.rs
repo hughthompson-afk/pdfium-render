@@ -16354,7 +16354,48 @@ impl PdfiumLibraryBindings for WasmPdfiumBindings {
     ) -> FPDF_BOOL {
         log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFImageObj_SetBitmap()");
 
-        PdfiumRenderWasmState::lock()
+        let state = PdfiumRenderWasmState::lock();
+
+        // If pages is not null and count > 0, we need to copy the page handle(s) to WASM memory
+        // because WASM modules cannot directly access pointers from the Rust heap.
+        // FPDF_PAGE is a pointer type, so we need to copy the pointer values themselves.
+        let pages_ptr = if !pages.is_null() && count > 0 {
+            // Calculate the size needed for the page handle array
+            // FPDF_PAGE is a pointer, so on 32-bit WASM it's 4 bytes, on 64-bit it's 8 bytes
+            let page_size = std::mem::size_of::<FPDF_PAGE>();
+            let array_size = count as usize * page_size;
+            
+            // Allocate memory in WASM heap for the page handle array
+            let pages_ptr = state.malloc(array_size);
+            
+            log::debug!(
+                "pdfium-render::PdfiumLibraryBindings::FPDFImageObj_SetBitmap(): allocated {} bytes in WASM heap at offset {} for {} page handle(s)",
+                array_size,
+                pages_ptr,
+                count
+            );
+            
+            // Copy the page handle pointer values from Rust memory to WASM memory
+            // We read the FPDF_PAGE values (which are pointers) from the Rust pointer
+            // and write them as bytes to WASM memory
+            unsafe {
+                let rust_pages_slice = std::slice::from_raw_parts(pages, count as usize);
+                // Convert the page handles to bytes
+                let pages_bytes = std::slice::from_raw_parts(
+                    rust_pages_slice.as_ptr() as *const u8,
+                    array_size
+                );
+                // Write the page handles to WASM memory
+                state.copy_bytes_to_pdfium_address(pages_bytes, pages_ptr);
+            }
+            
+            pages_ptr
+        } else {
+            // If pages is null or count is 0, pass 0 (null pointer) to the WASM function
+            0
+        };
+
+        let result = state
             .call(
                 "FPDFImageObj_SetBitmap",
                 JsFunctionArgumentType::Number,
@@ -16365,14 +16406,25 @@ impl PdfiumLibraryBindings for WasmPdfiumBindings {
                     JsFunctionArgumentType::Pointer,
                 ]),
                 Some(&JsValue::from(Array::of4(
-                    &Self::js_value_from_page_mut(pages),
+                    &Self::js_value_from_offset(pages_ptr),
                     &JsValue::from_f64(count as f64),
                     &Self::js_value_from_object(image_object),
                     &Self::js_value_from_bitmap(bitmap),
                 ))),
             )
             .as_f64()
-            .unwrap() as FPDF_BOOL
+            .unwrap() as FPDF_BOOL;
+
+        // Free the allocated memory if we allocated it
+        if pages_ptr > 0 {
+            state.free(pages_ptr);
+            log::debug!(
+                "pdfium-render::PdfiumLibraryBindings::FPDFImageObj_SetBitmap(): freed WASM heap allocation at offset {}",
+                pages_ptr
+            );
+        }
+
+        result
     }
 
     #[allow(non_snake_case)]

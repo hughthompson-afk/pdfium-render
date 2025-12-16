@@ -22,7 +22,7 @@ mod flatten; // Keep internal flatten operation private.
 use object::ownership::PdfPageObjectOwnership;
 
 use crate::bindgen::{
-    FLATTEN_FAIL, FLATTEN_NOTHINGTODO, FLATTEN_SUCCESS, FLAT_PRINT, FPDF_DOCUMENT, FPDF_FORMHANDLE,
+    FLATTEN_FAIL, FLATTEN_NOTHINGTODO, FLATTEN_SUCCESS, FLAT_NORMALDISPLAY, FPDF_DOCUMENT, FPDF_FORMHANDLE,
     FPDF_PAGE,
 };
 use crate::bindings::PdfiumLibraryBindings;
@@ -968,7 +968,29 @@ impl<'a> PdfPage<'a> {
     // https://github.com/ajrcarey/pdfium-render/issues/140
     pub fn flatten(&mut self) -> Result<(), PdfiumError> {
         // TODO: AJRC - 28/5/22 - consider allowing the caller to set the FLAT_NORMALDISPLAY or FLAT_PRINT flag.
-        let flag = FLAT_PRINT;
+        let flag = FLAT_NORMALDISPLAY;
+
+        // Debug all annotations before flattening
+        #[cfg(target_arch = "wasm32")]
+        {
+            use web_sys::console;
+            console::log_1(&"🔍 DEBUGGING ALL ANNOTATIONS BEFORE FLATTENING".into());
+            console::log_1(&"═══════════════════════════════════════════════════════════".into());
+
+            let annotation_count = self.bindings().FPDFPage_GetAnnotCount(self.page_handle);
+            console::log_1(&format!("   Total annotations: {}", annotation_count).into());
+
+            for i in 0..annotation_count {
+                let handle = self.bindings().FPDFPage_GetAnnot(self.page_handle, i as c_int);
+                if !handle.is_null() {
+                    console::log_1(&format!("   --- Annotation {} ---", i).into());
+                    // Use the debug function from annotations.rs
+                    use crate::pdf::document::page::annotations::debug_annotation_appearance_streams;
+                    debug_annotation_appearance_streams(handle, self.bindings(), &format!("Annotation {}", i));
+                }
+            }
+            console::log_1(&"═══════════════════════════════════════════════════════════".into());
+        }
 
         match self
             .bindings()

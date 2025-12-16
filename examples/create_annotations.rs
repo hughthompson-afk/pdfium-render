@@ -61,6 +61,34 @@ pub fn main() -> Result<(), PdfiumError> {
         text_annotation.creation_date()
     );
 
+    // Debug appearance streams to verify annotation is created correctly
+    // You can copy the debug_annotation_appearance_streams function from the source
+    // and call it like this:
+    // debug_annotation_appearance_streams(text_annotation.handle(), page.bindings(), "Text Annotation");
+
+    // Test automatic appearance stream generation for text fields
+    #[cfg(feature = "pdfium_future")]
+    {
+        // Initialize form environment for widget annotations
+        document.ensure_acro_form()?;
+        let form_handle = document.init_form_fill_environment()?;
+
+        // Create a text field to test automatic appearance stream generation
+        let text_widget = page.annotations_mut().create_widget_annotation(
+            form_handle,
+            "TestTextField",
+            PdfFormFieldType::Text,
+            PdfRect::new(50.0, 600.0, 250.0, 620.0),
+        )?;
+
+        // Set a value to test appearance stream rendering
+        if let Some(field) = text_widget.form_field() {
+            if let Some(text_field) = field.as_text_field() {
+                text_field.set_value("Hello World")?;
+            }
+        }
+    }
+
     text_annotation.set_position(PdfPoints::new(150.0), PdfPoints::new(400.0))?;
     text_annotation.set_width(PdfPoints::new(75.0))?;
     text_annotation.set_height(PdfPoints::new(30.0))?;
@@ -87,6 +115,40 @@ pub fn main() -> Result<(), PdfiumError> {
         "Free text annotation modification date after positioning: {:?}",
         free_text_annotation.modification_date()
     );
+
+    // Test automatic appearance stream generation
+    println!("\n=== Free Text Annotation Appearance Stream Test ===");
+    println!("Checking appearance stream before any modifications:");
+    page.annotations().debug_appearance_streams(3, "Free Text Annotation (before modifications)");
+
+    // Test customizing the appearance
+    println!("\nCustomizing free text annotation appearance...");
+    free_text_annotation
+        .set_appearance()
+        .with_font_size(14.0)
+        .with_text_color(PdfColor::RED)
+        .with_horizontal_alignment(TextAlignment::Center)
+        .with_vertical_alignment(VerticalAlignment::Middle)
+        .with_border(2.0, PdfColor::BLUE)
+        .with_background(PdfColor::new(240, 240, 240, 255))
+        .apply()?;
+
+    println!("Checking appearance stream after customization:");
+    page.annotations().debug_appearance_streams(3, "Free Text Annotation (after customization)");
+
+    // Test automatic regeneration on content change
+    println!("\nTesting automatic regeneration on content change...");
+    free_text_annotation.set_contents("Updated comment text")?;
+    println!("Checking appearance stream after content change:");
+    page.annotations().debug_appearance_streams(3, "Free Text Annotation (after content change)");
+
+    // Test flattening
+    println!("\n=== Testing Flattening ===");
+    println!("Flattening page to test appearance streams...");
+    page.flatten()?;
+
+    println!("Page flattened successfully! Free text annotations should now be visible.");
+    println!("=== End Free Text Annotation Tests ===\n");
 
     let mut link_annotation = page
         .annotations_mut()

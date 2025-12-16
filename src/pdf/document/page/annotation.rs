@@ -5,6 +5,7 @@ pub mod caret;
 pub mod circle;
 pub mod file_attachment;
 pub mod free_text;
+pub mod free_text_appearance;
 pub mod highlight;
 pub mod ink;
 pub mod line;
@@ -1389,6 +1390,7 @@ where
     fn bounds(&self) -> Result<PdfRect, PdfiumError> {
         self.bounds_impl()
     }
+
 
     #[inline]
     fn set_bounds(&mut self, bounds: PdfRect) -> Result<(), PdfiumError> {

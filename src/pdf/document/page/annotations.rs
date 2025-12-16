@@ -1,7 +1,7 @@
 //! Defines the [PdfPageAnnotations] struct, exposing functionality related to the
 //! annotations that have been added to a single `PdfPage`.
 
-use crate::bindgen::{FPDF_ANNOTATION, FPDF_DOCUMENT, FPDF_FORMHANDLE, FPDF_PAGE};
+use crate::bindgen::{FPDF_ANNOTATION, FPDF_DOCUMENT, FPDF_FORMHANDLE, FPDF_PAGE, FS_RECTF, FPDF_WCHAR};
 use crate::bindings::PdfiumLibraryBindings;
 use crate::error::{PdfiumError, PdfiumInternalError};
 #[cfg(target_arch = "wasm32")]
@@ -42,6 +42,7 @@ use std::ffi::CString;
 use crate::pdf::document::page::object::{PdfPageObject, PdfPageObjectCommon};
 use crate::pdf::document::page::{PdfPage, PdfPageContentRegenerationStrategy, PdfPageIndexCache};
 use crate::pdf::quad_points::PdfQuadPoints;
+use crate::pdf::appearance_mode::PdfAppearanceMode;
 use chrono::prelude::*;
 use std::ops::Range;
 use std::os::raw::c_int;
@@ -93,6 +94,7 @@ impl<'a> PdfPageAnnotations<'a> {
     pub fn bindings(&self) -> &'a dyn PdfiumLibraryBindings {
         self.bindings
     }
+
 
     /// Returns the total number of annotations that have been added to the containing `PdfPage`.
     #[inline]
@@ -331,12 +333,59 @@ impl<'a> PdfPageAnnotations<'a> {
         &mut self,
         text: &str,
     ) -> Result<PdfPageFreeTextAnnotation<'a>, PdfiumError> {
+        #[cfg(target_arch = "wasm32")]
+        {
+            use web_sys::console;
+            console::log_1(&"═══════════════════════════════════════════════════════════".into());
+            console::log_1(&"🔧 create_free_text_annotation()".into());
+            console::log_1(&format!("   Text: '{}'", text).into());
+            console::log_1(&"═══════════════════════════════════════════════════════════".into());
+        }
+
         let mut annotation = self.create_annotation(
             PdfPageAnnotationType::FreeText,
             PdfPageFreeTextAnnotation::from_pdfium,
         )?;
 
-        annotation.set_contents(text)?;
+        #[cfg(target_arch = "wasm32")]
+        {
+            use web_sys::console;
+            console::log_1(&"✅ Annotation created, setting contents".into());
+        }
+
+        let set_contents_result = annotation.set_contents(text);
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            use web_sys::console;
+            match &set_contents_result {
+                Ok(_) => console::log_1(&"✅ set_contents succeeded".into()),
+                Err(e) => console::log_1(&format!("❌ set_contents failed: {:?}", e).into()),
+            }
+        }
+
+        set_contents_result?;
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            use web_sys::console;
+            console::log_1(&"   Generating appearance stream".into());
+        }
+
+        // Automatically generate appearance stream
+        let appearance_result = annotation.auto_generate_appearance_stream();
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            use web_sys::console;
+            match &appearance_result {
+                Ok(_) => console::log_1(&"✅ auto_generate_appearance_stream succeeded".into()),
+                Err(e) => console::log_1(&format!("❌ auto_generate_appearance_stream failed: {:?}", e).into()),
+            }
+            console::log_1(&"═══════════════════════════════════════════════════════════".into());
+        }
+
+        appearance_result?;
 
         Ok(annotation)
     }
@@ -823,6 +872,11 @@ impl<'a> PdfPageAnnotations<'a> {
             self.bindings(),
         );
 
+        // Note: We no longer automatically generate appearance streams for text fields.
+        // PDFium should handle appearance stream generation natively when form values are set
+        // via form handling APIs. Manual appearance stream generation via set_appearance()
+        // can cause issues with font Resources dictionaries during flattening.
+
         // Handle content regeneration if needed
         if let Some(content_regeneration_strategy) =
             PdfPageIndexCache::get_content_regeneration_strategy_for_page(
@@ -1060,6 +1114,43 @@ impl<'a> PdfPageAnnotations<'a> {
             ))
         }
     }
+
+    /// Comprehensive debugging function to verify annotation appearance streams.
+    /// Call this on an annotation index to diagnose flattening issues.
+    ///
+    /// This function prints detailed information about an annotation's appearance streams,
+    /// including whether the /AP dictionary exists, stream lengths, content previews,
+    /// and validation checks that are critical for successful flattening.
+    ///
+    /// # Parameters
+    /// - `index` - Zero-based index of the annotation to debug
+    /// - `annotation_type` - Descriptive name for the annotation (for logging)
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// use pdfium_render::prelude::*;
+    ///
+    /// let pdfium = Pdfium::default();
+    /// let mut document = pdfium.create_new_pdf().unwrap();
+    /// let mut page = document.pages_mut().create_page_at_start(PdfPagePaperSize::a4()).unwrap();
+    ///
+    /// page.annotations_mut().create_text_annotation("Test").unwrap();
+    /// page.annotations().debug_appearance_streams(0, "Text Annotation");
+    /// ```
+    pub fn debug_appearance_streams(&self, index: usize, annotation_type: &str) {
+        if index >= self.len() {
+            println!("❌ Annotation index {} is out of bounds (max: {})", index, self.len().saturating_sub(1));
+            return;
+        }
+
+        let handle = self.bindings.FPDFPage_GetAnnot(self.page_handle, index as c_int);
+        if handle.is_null() {
+            println!("❌ Failed to get annotation handle for index {}", index);
+            return;
+        }
+
+        debug_annotation_appearance_streams(handle, self.bindings, annotation_type);
+    }
 }
 
 /// An iterator over all the [PdfPageAnnotation] objects in a [PdfPageAnnotations] collection.
@@ -1076,6 +1167,109 @@ impl<'a> PdfPageAnnotationsIterator<'a> {
             next_index: 0,
         }
     }
+}
+
+/// Comprehensive debugging function to verify annotation appearance streams.
+/// Call this after creating annotations to diagnose flattening issues.
+///
+/// # Example
+/// ```rust,no_run
+/// use pdfium_render::prelude::*;
+///
+/// let pdfium = Pdfium::default();
+/// let mut document = pdfium.create_new_pdf().unwrap();
+/// let mut page = document.pages_mut().create_page_at_start(PdfPagePaperSize::a4()).unwrap();
+///
+/// let annotation = page.annotations_mut().create_text_annotation("Test").unwrap();
+/// debug_annotation_appearance_streams(annotation.handle(), page.bindings(), "Text Annotation");
+/// ```
+pub fn debug_annotation_appearance_streams(
+    annotation_handle: FPDF_ANNOTATION,
+    bindings: &dyn PdfiumLibraryBindings,
+    annotation_type: &str,
+) {
+    #[cfg(target_arch = "wasm32")]
+    use web_sys::console;
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn log_info(message: &str) { println!("{}", message); }
+    #[cfg(target_arch = "wasm32")]
+    fn log_info(message: &str) { console::log_1(&message.into()); }
+
+    log_info(&format!("🔍 DEBUGGING ANNOTATION APPEARANCE STREAMS: {}", annotation_type));
+    log_info("═══════════════════════════════════════════════════════════");
+
+    // Check if annotation has /AP key (appearance dictionary)
+    let has_ap = bindings.FPDFAnnot_HasKey(annotation_handle, "AP");
+    log_info(&format!("   Has /AP key: {}", bindings.is_true(has_ap)));
+
+    if bindings.is_true(has_ap) {
+        // Check each appearance mode
+        let modes = [
+            (PdfAppearanceMode::Normal, "Normal (/N)"),
+            (PdfAppearanceMode::RollOver, "RollOver (/R)"),
+            (PdfAppearanceMode::Down, "Down (/D)")
+        ];
+
+        for (mode, mode_name) in modes.iter() {
+            // Get appearance stream length
+            let ap_len = bindings.FPDFAnnot_GetAP(
+                annotation_handle,
+                mode.as_pdfium(),
+                std::ptr::null_mut(),
+                0,
+            );
+            log_info(&format!("   {} appearance stream length: {} bytes", mode_name, ap_len));
+
+            // If there's content, try to read it
+            if ap_len > 2 { // More than just empty UTF-16LE string
+                // Allocate buffer for content
+                let mut buffer = vec![0u16; (ap_len / 2) as usize];
+                let result = bindings.FPDFAnnot_GetAP(
+                    annotation_handle,
+                    mode.as_pdfium(),
+                    buffer.as_mut_ptr() as *mut FPDF_WCHAR,
+                    ap_len,
+                );
+
+                if result == ap_len {
+                    // Convert UTF-16LE to string and show preview
+                    if let Ok(content) = String::from_utf16(&buffer[..buffer.len().saturating_sub(1)]) {
+                        let preview = if content.len() > 100 {
+                            format!("{}...", &content[..100])
+                        } else {
+                            content.clone()
+                        };
+                        log_info(&format!("   {} content preview: {}", mode_name, preview));
+
+                        // Check for common PDF operators
+                        let has_operators = content.contains(" BT") || content.contains(" ET") ||
+                                          content.contains(" q") || content.contains(" Q") ||
+                                          content.contains(" cm") || content.contains(" Do");
+                        log_info(&format!("   {} has PDF operators: {}", mode_name, has_operators));
+                    } else {
+                        log_info(&format!("   {} content: (could not decode as UTF-16)", mode_name));
+                    }
+                } else {
+                    log_info(&format!("   {} content: (failed to read)", mode_name));
+                }
+            }
+        }
+    } else {
+        log_info("   ❌ No /AP dictionary found!");
+    }
+
+    // Check annotation rectangle (important for appearance streams)
+    let mut rect = FS_RECTF { left: 0.0, bottom: 0.0, right: 0.0, top: 0.0 };
+    let rect_result = bindings.FPDFAnnot_GetRect(annotation_handle, &mut rect);
+    log_info(&format!("   Has valid rect: {} (left={}, bottom={}, right={}, top={})",
+             bindings.is_true(rect_result), rect.left, rect.bottom, rect.right, rect.top));
+
+    // Check if annotation is marked as invisible or other flags that might affect flattening
+    let flags = bindings.FPDFAnnot_GetFlags(annotation_handle);
+    log_info(&format!("   Annotation flags: {} (0x{:X})", flags, flags));
+
+    log_info("═══════════════════════════════════════════════════════════");
 }
 
 impl<'a> Iterator for PdfPageAnnotationsIterator<'a> {

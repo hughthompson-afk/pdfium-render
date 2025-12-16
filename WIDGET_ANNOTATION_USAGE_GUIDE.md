@@ -129,11 +129,18 @@ let text_field = page.annotations_mut().create_widget_annotation(
     PdfRect::new(100.0, 700.0, 300.0, 720.0), // left, bottom, right, top
 )?;
 
+// Text fields automatically generate appearance streams for proper flattening
 // Access the form field to set properties
 if let Some(field) = text_field.form_field() {
     if let Some(text_field) = field.as_text_field() {
         // Set default value, make it required, etc.
         // text_field.set_value("Default text")?;
+
+        // Appearance streams are automatically generated, but you can customize them:
+        // text_field.set_appearance()
+        //     .with_font_size(14.0)
+        //     .with_text_color(PdfColor::BLUE)
+        //     .apply()?;
     }
 }
 ```
@@ -309,15 +316,15 @@ fn create_sample_form() -> Result<(), PdfiumError> {
         PdfPagePaperSize::a4().height,
     )?;
     
-    // Create a text field for name
+    // Create a text field for name (appearance stream automatically generated)
     let name_field = page.annotations_mut().create_widget_annotation(
         form_handle,
         "FullName",
         PdfFormFieldType::Text,
         PdfRect::new(100.0, 750.0, 400.0, 770.0),
     )?;
-    
-    // Create a text field for email
+
+    // Create a text field for email (appearance stream automatically generated)
     let email_field = page.annotations_mut().create_widget_annotation(
         form_handle,
         "Email",
@@ -483,6 +490,8 @@ If you're using `pdfium-render` in a WASM environment (like the error messages s
 5. **Content Regeneration**: If the page has `AutomaticOnEveryChange` content regeneration strategy, content will be automatically regenerated after creating the widget.
 
 6. **Memory Management**: Widget annotations are managed by the `PdfPageWidgetAnnotation` wrapper - no manual cleanup needed.
+
+7. **Text Field Appearance Streams**: Text fields automatically generate appearance streams when created via `create_widget_annotation()`, ensuring they flatten properly. The appearance streams use sensible defaults (Helvetica 12pt, black text, left alignment) but can be customized using `set_appearance()` if needed.
 
 ## Troubleshooting
 

@@ -260,8 +260,23 @@ pub(crate) mod internal {
 
         /// Internal implementation of `set_value()` function shared by value-carrying form
         /// field widgets such as text fields. Not exposed directly by [PdfFormFieldCommon].
+        /// 
+        /// NOTE: This uses DIRECT annotation manipulation (OLD METHOD). For text fields,
+        /// prefer using the form fill API via PdfFormTextField::set_value() which will
+        /// attempt to use FORM_ReplaceSelection for proper appearance stream regeneration.
         #[inline]
         fn set_value_impl(&mut self, value: &str) -> Result<(), PdfiumError> {
+            #[cfg(target_arch = "wasm32")]
+            {
+                use web_sys::console;
+                console::log_1(&"═══════════════════════════════════════════════════════════".into());
+                console::log_1(&"⚠️ set_value_impl() - USING DIRECT ANNOTATION MANIPULATION (OLD METHOD)".into());
+                console::log_1(&format!("   Setting value via FPDFAnnot_SetStringValue_str('V', '{}')", value).into());
+                console::log_1(&"   ⚠️ This method does NOT trigger appearance stream regeneration automatically".into());
+                console::log_1(&"   ⚠️ Appearance streams must be manually regenerated after setting value".into());
+                console::log_1(&"═══════════════════════════════════════════════════════════".into());
+            }
+
             self.bindings()
                 .to_result(self.bindings().FPDFAnnot_SetStringValue_str(
                     self.annotation_handle(),

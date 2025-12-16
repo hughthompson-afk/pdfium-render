@@ -46,7 +46,12 @@ impl<'a> PdfPageXfaWidgetAnnotation<'a> {
                 bindings,
             ),
             form_field: form_handle.and_then(|form_handle| {
-                PdfFormField::from_pdfium(form_handle, annotation_handle, bindings)
+                PdfFormField::from_pdfium_with_document(
+                    form_handle,
+                    annotation_handle,
+                    Some(document_handle),
+                    bindings,
+                )
             }),
             bindings,
         }

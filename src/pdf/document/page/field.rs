@@ -11,6 +11,7 @@ pub(crate) mod private; // Keep private so that the PdfFormFieldPrivate trait is
 pub mod radio;
 pub mod signature;
 pub mod text;
+pub mod text_appearance;
 pub mod unknown;
 
 use crate::bindgen::{
@@ -143,6 +144,15 @@ impl<'a> PdfFormField<'a> {
         annotation_handle: FPDF_ANNOTATION,
         bindings: &'a dyn PdfiumLibraryBindings,
     ) -> Option<Self> {
+        Self::from_pdfium_with_document(form_handle, annotation_handle, None, bindings)
+    }
+
+    pub(crate) fn from_pdfium_with_document(
+        form_handle: FPDF_FORMHANDLE,
+        annotation_handle: FPDF_ANNOTATION,
+        document_handle: Option<crate::bindgen::FPDF_DOCUMENT>,
+        bindings: &'a dyn PdfiumLibraryBindings,
+    ) -> Option<Self> {
         let result = bindings.FPDFAnnot_GetFormFieldType(form_handle, annotation_handle);
 
         if result == -1 {
@@ -162,19 +172,54 @@ impl<'a> PdfFormField<'a> {
             PdfFormFieldType::RadioButton => PdfFormField::RadioButton(
                 PdfFormRadioButtonField::from_pdfium(form_handle, annotation_handle, bindings),
             ),
-            PdfFormFieldType::ComboBox => PdfFormField::ComboBox(
-                PdfFormComboBoxField::from_pdfium(form_handle, annotation_handle, bindings),
-            ),
-            PdfFormFieldType::ListBox => PdfFormField::ListBox(PdfFormListBoxField::from_pdfium(
-                form_handle,
-                annotation_handle,
-                bindings,
-            )),
-            PdfFormFieldType::Text => PdfFormField::Text(PdfFormTextField::from_pdfium(
-                form_handle,
-                annotation_handle,
-                bindings,
-            )),
+            PdfFormFieldType::ComboBox => {
+                if let Some(doc_handle) = document_handle {
+                    PdfFormField::ComboBox(PdfFormComboBoxField::from_pdfium_with_document(
+                        form_handle,
+                        annotation_handle,
+                        doc_handle,
+                        bindings,
+                    ))
+                } else {
+                    PdfFormField::ComboBox(PdfFormComboBoxField::from_pdfium(
+                        form_handle,
+                        annotation_handle,
+                        bindings,
+                    ))
+                }
+            }
+            PdfFormFieldType::ListBox => {
+                if let Some(doc_handle) = document_handle {
+                    PdfFormField::ListBox(PdfFormListBoxField::from_pdfium_with_document(
+                        form_handle,
+                        annotation_handle,
+                        doc_handle,
+                        bindings,
+                    ))
+                } else {
+                    PdfFormField::ListBox(PdfFormListBoxField::from_pdfium(
+                        form_handle,
+                        annotation_handle,
+                        bindings,
+                    ))
+                }
+            }
+            PdfFormFieldType::Text => {
+                if let Some(doc_handle) = document_handle {
+                    PdfFormField::Text(PdfFormTextField::from_pdfium_with_document(
+                        form_handle,
+                        annotation_handle,
+                        doc_handle,
+                        bindings,
+                    ))
+                } else {
+                    PdfFormField::Text(PdfFormTextField::from_pdfium(
+                        form_handle,
+                        annotation_handle,
+                        bindings,
+                    ))
+                }
+            }
             PdfFormFieldType::Signature => PdfFormField::Signature(
                 PdfFormSignatureField::from_pdfium(form_handle, annotation_handle, bindings),
             ),
