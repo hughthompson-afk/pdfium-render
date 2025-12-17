@@ -355,9 +355,9 @@ impl<'a> PdfPageAnnotationAttachmentPoints<'a> {
                 
                 if min_x < max_x && min_y < max_y {
                     // Update rect with calculated bounds
-                    // For squiggly annotations, add padding for wave height (waves extend ±2.0, plus line width 1.0, so need at least 4.0 padding each side)
-                    // Increased to 7.0 to prevent clipping of bottom waves
-                    let wave_padding = if annotation_type == PdfPageAnnotationType::Squiggly { 7.0 } else { 0.0 };
+                    // We do NOT add wave padding for squiggly annotations anymore,
+                    // to match Underline implementation and prevent scaling issues.
+                    let wave_padding = 0.0;
                     
                     #[cfg(target_arch = "wasm32")]
                     {
@@ -411,130 +411,10 @@ impl<'a> PdfPageAnnotationAttachmentPoints<'a> {
         // Rect is valid - but for squiggly annotations, we must expand it to include wave height
         // Waves extend ±2.0 from baseline, plus line width 1.0, so we need at least 4.0 padding on each side
         if annotation_type == PdfPageAnnotationType::Squiggly {
-            let wave_padding = 7.0; // Increased from 5.0 to 7.0 to prevent clipping
-            let attachment_count = self.len();
-            
-            #[cfg(target_arch = "wasm32")]
-            {
-                use web_sys::console;
-                console::log_1(&format!("🌊 Squiggly detected! Expanding rect. Current: bottom={:.2}, top={:.2}, height={:.2}, attachment_count={}", 
-                    rect.bottom, rect.top, height, attachment_count).into());
-            }
-            
-            if attachment_count > 0 {
-                // Find the actual bounds of all attachment points
-                let mut min_y = f32::MAX;
-                let mut max_y = f32::MIN;
-                for i in 0..attachment_count {
-                    if let Ok(quad) = self.get(i) {
-                        let quad_min_y = quad.y1.value.min(quad.y2.value).min(quad.y3.value).min(quad.y4.value);
-                        let quad_max_y = quad.y1.value.max(quad.y2.value).max(quad.y3.value).max(quad.y4.value);
-                        min_y = min_y.min(quad_min_y);
-                        max_y = max_y.max(quad_max_y);
-                    }
-                }
-                
-                #[cfg(target_arch = "wasm32")]
-                {
-                    use web_sys::console;
-                    console::log_1(&format!("   Attachment point bounds: min_y={:.2}, max_y={:.2}, wave_padding={:.2}", 
-                        min_y, max_y, wave_padding).into());
-                }
-                
-                // Always expand rect to include wave padding for squiggly annotations
-                // Force expansion: use the minimum of current bottom and calculated bottom, and maximum of current top and calculated top
-                let old_bottom = rect.bottom;
-                let old_top = rect.top;
-                // Calculate what the bounds should be with padding
-                let required_bottom = min_y - wave_padding;
-                let required_top = max_y + wave_padding;
-                // Expand to include both current bounds and required bounds with padding
-                let new_bottom = old_bottom.min(required_bottom);
-                let new_top = old_top.max(required_top);
-                
-                #[cfg(target_arch = "wasm32")]
-                {
-                    use web_sys::console;
-                    console::log_1(&format!("   Expansion calculation: min_y={:.2}, max_y={:.2}, required_bottom={:.2}, required_top={:.2}", 
-                        min_y, max_y, required_bottom, required_top).into());
-                    console::log_1(&format!("   Expansion: bottom {:.2} -> {:.2}, top {:.2} -> {:.2}", 
-                        old_bottom, new_bottom, old_top, new_top).into());
-                }
-                
-                // Always update to expanded bounds
-                rect.bottom = new_bottom;
-                rect.top = new_top;
-                width = rect.right - rect.left;
-                height = rect.top - rect.bottom;
-                
-                // Set the expanded rect in PDFium
-                if !self.bindings.is_true(self.bindings.FPDFAnnot_SetRect(self.annotation_handle, &rect)) {
-                    #[cfg(target_arch = "wasm32")]
-                    {
-                        use web_sys::console;
-                        console::log_1(&"⚠️  Failed to set expanded rect".into());
-                    }
-                }
-                
-                // Re-fetch the rect to ensure PDFium has the updated bounds
-                let mut updated_rect = FS_RECTF {
-                    left: 0.0,
-                    bottom: 0.0,
-                    right: 0.0,
-                    top: 0.0,
-                };
-                if self.bindings.is_true(self.bindings.FPDFAnnot_GetRect(self.annotation_handle, &mut updated_rect)) {
-                    rect = updated_rect;
-                    width = rect.right - rect.left;
-                    height = rect.top - rect.bottom;
-                }
-                
-                #[cfg(target_arch = "wasm32")]
-                {
-                    use web_sys::console;
-                    console::log_1(&format!("📐 Expanded squiggly rect for wave padding: bottom={:.2} -> {:.2}, top={:.2} -> {:.2} (final: w={:.2}, h={:.2})", 
-                        old_bottom, rect.bottom, old_top, rect.top, width, height).into());
-                }
-            } else {
-                // No attachment points - expand existing rect by wave padding
-                #[cfg(target_arch = "wasm32")]
-                let old_bottom = rect.bottom;
-                #[cfg(target_arch = "wasm32")]
-                let old_top = rect.top;
-                rect.bottom = rect.bottom - wave_padding;
-                rect.top = rect.top + wave_padding;
-                width = rect.right - rect.left;
-                height = rect.top - rect.bottom;
-                
-                // Set the expanded rect in PDFium
-                if !self.bindings.is_true(self.bindings.FPDFAnnot_SetRect(self.annotation_handle, &rect)) {
-                    #[cfg(target_arch = "wasm32")]
-                    {
-                        use web_sys::console;
-                        console::log_1(&"⚠️  Failed to set expanded rect".into());
-                    }
-                }
-                
-                // Re-fetch the rect to ensure PDFium has the updated bounds
-                let mut updated_rect = FS_RECTF {
-                    left: 0.0,
-                    bottom: 0.0,
-                    right: 0.0,
-                    top: 0.0,
-                };
-                if self.bindings.is_true(self.bindings.FPDFAnnot_GetRect(self.annotation_handle, &mut updated_rect)) {
-                    rect = updated_rect;
-                    width = rect.right - rect.left;
-                    height = rect.top - rect.bottom;
-                }
-                
-                #[cfg(target_arch = "wasm32")]
-                {
-                    use web_sys::console;
-                    console::log_1(&format!("📐 Expanded squiggly rect (no attachment points): bottom={:.2} -> {:.2}, top={:.2} -> {:.2} (final: w={:.2}, h={:.2})", 
-                        old_bottom, rect.bottom, old_top, rect.top, width, height).into());
-                }
-            }
+            // We do NOT expand rect anymore to prevent scaling issues.
+            // Just update width/height based on current rect.
+            width = rect.right - rect.left;
+            height = rect.top - rect.bottom;
         }
         
         // Rect is valid - but for highlight/underline/strikeout/squiggly, we should recalculate it from all attachment points
@@ -821,8 +701,7 @@ impl<'a> PdfPageAnnotationAttachmentPoints<'a> {
                 
                 let mut stream = String::new();
                 stream.push_str("q\n");
-                // Translate coordinate system to annotation's bottom-left corner (same as underline)
-                // This ensures each line uses its own baseline relative to rect.bottom
+                // Translate coordinate system to annotation's bottom-left corner (matches Underline implementation)
                 stream.push_str(&format!("1 0 0 1 {:.4} {:.4} cm\n", rect.left, rect.bottom));
                 stream.push_str(&format!("{:.4} {:.4} {:.4} RG\n", color_r, color_g, color_b));
                 stream.push_str("1 w\n"); // line width
@@ -830,10 +709,9 @@ impl<'a> PdfPageAnnotationAttachmentPoints<'a> {
                 if attachment_count > 0 {
                     for i in 0..attachment_count {
                         if let Ok(quad) = self.get(i) {
+                            // Use relative coordinates to match Underline implementation
                             let x_left = quad.left().value - rect.left;
                             let x_right = quad.right().value - rect.left;
-                            // Use each quad's own bottom value relative to rect.bottom (same as underline)
-                            // This ensures each line is positioned correctly at its own baseline
                             let y_bottom = quad.bottom().value - rect.bottom;
                             let quad_width = x_right - x_left;
                             
@@ -867,18 +745,11 @@ impl<'a> PdfPageAnnotationAttachmentPoints<'a> {
                     }
                 } else {
                     // No attachment points - use annotation rect as fallback
-                    // Estimate baseline as rect.bottom + wave_padding (since rect was expanded downward)
-                    let wave_padding = 7.0;
-                    let estimated_baseline = rect.bottom + wave_padding;
-                    
-                    // Translate to estimated baseline
-                    stream.push_str(&format!("1 0 0 1 {:.4} {:.4} cm\n", rect.left, estimated_baseline));
-                    
                     // Use fixed wave period for consistent bezier curves
                     let wave_count = ((width / WAVE_PERIOD).ceil().max(2.0) as i32).min(100);
                     let wave_width = width / wave_count as f32;
                     
-                    // Start at left bottom (relative to estimated baseline)
+                    // Start at left bottom (relative to rect origin, so 0,0)
                     stream.push_str("0 0 m\n");
                     
                     for wave in 0..wave_count {

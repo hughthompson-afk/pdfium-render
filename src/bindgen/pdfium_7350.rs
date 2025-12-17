@@ -4350,14 +4350,6 @@ unsafe extern "C" {
     ) -> FPDF_BOOL;
 }
 unsafe extern "C" {
-    #[doc = " Experimental API.\n Set the float value corresponding to |key| in |annot|'s dictionary.\n\n   annot  - handle to an annotation.\n   key    - the key to the dictionary entry, encoded in UTF-8.\n   value  - the float value to be set.\n\n Returns True if successful, False otherwise."]
-    pub fn FPDFAnnot_SetNumberValue(
-        annot: FPDF_ANNOTATION,
-        key: FPDF_BYTESTRING,
-        value: f32,
-    ) -> FPDF_BOOL;
-}
-unsafe extern "C" {
     #[doc = " Experimental API.\n Set the AP (appearance string) in |annot|'s dictionary for a given\n |appearanceMode|.\n\n   annot          - handle to an annotation.\n   appearanceMode - the appearance mode (normal, rollover or down) for which\n                    to get the AP.\n   value          - the string value to be set, encoded in UTF-16LE. If\n                    nullptr is passed, the AP is cleared for that mode. If the\n                    mode is Normal, APs for all modes are cleared.\n\n Returns true if successful."]
     pub fn FPDFAnnot_SetAP(
         annot: FPDF_ANNOTATION,

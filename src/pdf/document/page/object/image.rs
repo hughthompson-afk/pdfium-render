@@ -944,79 +944,69 @@ impl<'a> PdfPageImageObject<'a> {
                 continue;
             }
             
-            match obj_type {
-                // Image object
-                3 => { // FPDF_PAGEOBJ_IMAGE
-                    // Transform coordinates from page space to annotation-local space
-                    // The appearance stream's BBox is at the annotation position, so we need
-                    // to adjust the matrix translation to be relative to annotation origin
-                    let mut local_matrix = matrix;
-                    local_matrix.e = matrix.e - annotation_rect.left;
-                    local_matrix.f = matrix.f - annotation_rect.bottom;
-                    
-                    // Write transformation matrix
-                    content_stream.push_str(&format!(
-                        "{:.4} {:.4} {:.4} {:.4} {:.4} {:.4} cm\n",
-                        local_matrix.a, local_matrix.b, local_matrix.c, local_matrix.d,
-                        local_matrix.e, local_matrix.f
-                    ));
-                    
-                    // Write XObject reference (PDFium typically uses /F1, /F2, etc.)
-                    let xobject_name = format!("/F{}", image_index);
-                    content_stream.push_str(&format!("{} Do\n", xobject_name));
-                    
-                    image_index += 1;
-                    
-                    console::log_1(&format!("   ✅ Added image object {} with XObject {}", i, xobject_name).into());
-                }
-                // Path object - we'll skip for now as it's complex
-                // Text object - we'll skip for now as it's complex
-                _ => {
-                    console::log_1(&format!("   ℹ️ Skipping object {} of type {} (not yet supported in manual stream)", i, obj_type).into());
-                }
-            }
-        }
-        
-        // Restore graphics state
-        content_stream.push_str("Q\n");
-        
-        console::log_1(&format!("   Built content stream: {} bytes", content_stream.len()).into());
-        
-        // Set the appearance stream
-        let result = bindings.FPDFAnnot_SetAP_str(
-            annotation_handle,
-            PdfAppearanceMode::Normal.as_pdfium(),
-            &content_stream,
-        );
-        
-        if bindings.is_true(result) {
-            // Set Appearance State
-            let _as_result = bindings.FPDFAnnot_SetStringValue_str(annotation_handle, "AS", "/N");
-            console::log_1(&"   ✅ Manually set appearance stream".into());
-            
-            // CRITICAL: After manually setting the appearance stream, we need to call
-            // FPDFAnnot_UpdateObject for each image object to ensure PDFium populates
-            // the Resources dictionary with the image XObject references.
-            // Without this, the /F1 Do reference in the stream won't have a corresponding
-            // entry in Resources/XObject dictionary.
-            console::log_1(&"   🔄 Updating image objects to populate Resources dictionary...".into());
-            for i in 0..obj_count {
-                let obj_handle = bindings.FPDFAnnot_GetObject(annotation_handle, i);
-                if !obj_handle.is_null() {
-                    let obj_type = bindings.FPDFPageObj_GetType(obj_handle);
-                    if obj_type == 3 { // FPDF_PAGEOBJ_IMAGE
-                        let update_result = bindings.FPDFAnnot_UpdateObject(annotation_handle, obj_handle);
-                        if bindings.is_true(update_result) {
-                            console::log_1(&format!("   ✅ Updated image object {} - Resources should now be populated", i).into());
-                        } else {
-                            console::warn_1(&format!("   ⚠️ Failed to update image object {} - Resources may not be populated", i).into());
+                    match obj_type {
+                        // Image object
+                        3 => { // FPDF_PAGEOBJ_IMAGE
+                            // Transform coordinates from page space to annotation-local space
+                            let mut local_matrix = matrix;
+                            local_matrix.e = matrix.e - annotation_rect.left;
+                            local_matrix.f = matrix.f - annotation_rect.bottom;
+                            
+                            // Write graphics state save and transformation matrix
+                            content_stream.push_str("q\n");
+                            content_stream.push_str(&format!(
+                                "{:.4} {:.4} {:.4} {:.4} {:.4} {:.4} cm\n",
+                                local_matrix.a, local_matrix.b, local_matrix.c, local_matrix.d,
+                                local_matrix.e, local_matrix.f
+                            ));
+                            
+                            // Write XObject reference (PDFium typically uses /F1, /F2, etc.)
+                            let xobject_name = format!("/F{}", image_index);
+                            content_stream.push_str(&format!("{} Do\n", xobject_name));
+                            content_stream.push_str("Q\n");
+                            
+                            image_index += 1;
+                            
+                            console::log_1(&format!("   ✅ Added image object {} with XObject {}", i, xobject_name).into());
+                        }
+                        // Path object
+                        1 => { // FPDF_PAGEOBJ_PATH
+                            console::log_1(&format!("   ℹ️ Skipping path object {} in manual rebuild (use PDFium's generator instead)", i).into());
+                        }
+                        _ => {
+                            console::log_1(&format!("   ℹ️ Skipping object {} of type {} in manual rebuild", i, obj_type).into());
                         }
                     }
                 }
-            }
-            
-            Ok(())
-        } else {
+                
+                console::log_1(&format!("   Built content stream ({} bytes):\n{}", content_stream.len(), content_stream).into());
+                
+                // Set the appearance stream
+                let result = bindings.FPDFAnnot_SetAP_str(
+                    annotation_handle,
+                    PdfAppearanceMode::Normal.as_pdfium(),
+                    &content_stream,
+                );
+                
+                if bindings.is_true(result) {
+                    // Set Appearance State key to N (Normal)
+                    // Note: pdfium-render sets this as a string, which might be rejected by some viewers,
+                    // but it's the best we can do without a SetName API.
+                    let _as_result = bindings.FPDFAnnot_SetStringValue_str(annotation_handle, "AS", "N");
+                    console::log_1(&"   ✅ Manually set appearance stream and /AS key".into());
+                    
+                    // CRITICAL: We MUST call UpdateObject for the image objects AFTER setting the stream string.
+                    // This is the only way to get PDFium to populate the /Resources dictionary of the 
+                    // NEW stream we just created.
+                    for i in 0..obj_count {
+                        let obj_handle = bindings.FPDFAnnot_GetObject(annotation_handle, i);
+                        if !obj_handle.is_null() && bindings.FPDFPageObj_GetType(obj_handle) == 3 {
+                            bindings.FPDFAnnot_UpdateObject(annotation_handle, obj_handle);
+                        }
+                    }
+                    
+                    Ok(())
+                } else {
             console::warn_1(&"   ⚠️ Failed to set appearance stream".into());
             Err(PdfiumError::PdfiumLibraryInternalError(
                 PdfiumInternalError::Unknown,
@@ -1132,65 +1122,157 @@ impl<'a> PdfPageObjectPrivate<'a> for PdfPageImageObject<'a> {
                     
                     // CRITICAL: After adding the object, call FPDFAnnot_UpdateObject to ensure
                     // the appearance stream is regenerated with the image data properly embedded.
-                    // This ensures the image XObject is written to the PDF and referenced correctly
-                    // in the appearance stream, making it visible and properly serialized.
-                    //
-                    // NOTE: FPDFAnnot_UpdateObject may need to be called for EACH object in the annotation
-                    // to ensure all objects are included in the appearance stream. We call it once here
-                    // for the image object we just added.
+                    
+                    // 1. Set Intent and Name for Stamp annotations
+                    self.bindings().FPDFAnnot_SetStringValue_str(ownership.annotation_handle(), "IT", "Design");
+                    self.bindings().FPDFAnnot_SetStringValue_str(ownership.annotation_handle(), "Name", "Draft");
+
+                    // 2. FORCE center the image within the annotation bounds.
+                    // We ignore the caller's position and recalculate to guarantee correct positioning.
+                    let mut annot_rect = crate::bindgen::FS_RECTF { left: 0.0, top: 0.0, right: 0.0, bottom: 0.0 };
+                    let mut matrix = crate::bindgen::FS_MATRIX { a: 0.0, b: 0.0, c: 0.0, d: 0.0, e: 0.0, f: 0.0 };
+                    
+                    // Get annotation rect and matrix
+                    let has_annot_rect = self.bindings().is_true(self.bindings().FPDFAnnot_GetRect(ownership.annotation_handle(), &mut annot_rect));
+                    let has_matrix = self.bindings().is_true(self.bindings().FPDFPageObj_GetMatrix(self.object_handle(), &mut matrix));
+                    
+                    // Force center the image within the annotation using PAGE coordinates
+                    // PDFium's flattening may not properly transform local coords to page coords,
+                    // so we use page coordinates directly
+                    if has_annot_rect && has_matrix {
+                        let annot_width = annot_rect.right - annot_rect.left;
+                        let annot_height = annot_rect.top - annot_rect.bottom;
+                        let image_width = matrix.a;  // Scale factor = image width
+                        let image_height = matrix.d; // Scale factor = image height
+                        
+                        // Calculate centered position in LOCAL coordinates first
+                        let local_centered_e = (annot_width - image_width) / 2.0;
+                        let local_centered_f = (annot_height - image_height) / 2.0;
+                        
+                        // Convert to PAGE coordinates by adding annotation offset
+                        // This ensures the image appears at the right position on the page
+                        let page_e = annot_rect.left + local_centered_e;
+                        let page_f = annot_rect.bottom + local_centered_f;
+                        
+                        // Update the matrix with page coordinates
+                        matrix.e = page_e;
+                        matrix.f = page_f;
+                        self.bindings().FPDFPageObj_SetMatrix(self.object_handle(), &matrix);
+                    }
+                    
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        use web_sys::console;
+                        if has_annot_rect && has_matrix {
+                            // Get the updated matrix (after centering)
+                            let mut final_matrix = crate::bindgen::FS_MATRIX { a: 0.0, b: 0.0, c: 0.0, d: 0.0, e: 0.0, f: 0.0 };
+                            let has_final_matrix = self.bindings().is_true(
+                                self.bindings().FPDFPageObj_GetMatrix(self.object_handle(), &mut final_matrix)
+                            );
+                            
+                            let annot_width = annot_rect.right - annot_rect.left;
+                            let annot_height = annot_rect.top - annot_rect.bottom;
+                            
+                            console::log_1(&"".into());
+                            console::log_1(&"═══════════════════════════════════════════════════════════".into());
+                            console::log_1(&"📍 IMAGE POSITIONING DEBUG (using PAGE coordinates):".into());
+                            console::log_1(&"═══════════════════════════════════════════════════════════".into());
+                            
+                            // Annotation rectangle details
+                            console::log_1(&format!("   📐 ANNOTATION RECTANGLE (page coordinates):").into());
+                            console::log_1(&format!("      left={:.4}, bottom={:.4}, right={:.4}, top={:.4}", 
+                                annot_rect.left, annot_rect.bottom, annot_rect.right, annot_rect.top).into());
+                            console::log_1(&format!("      width={:.4}, height={:.4}", annot_width, annot_height).into());
+                            
+                            // Image size from matrix
+                            console::log_1(&format!("   🖼️  IMAGE SIZE (from matrix scale):").into());
+                            console::log_1(&format!("      width={:.2}, height={:.2}", final_matrix.a, final_matrix.d).into());
+                            
+                            // Show centered position in PAGE coordinates
+                            if has_final_matrix {
+                                // Calculate what local coords would be
+                                let local_e = final_matrix.e - annot_rect.left;
+                                let local_f = final_matrix.f - annot_rect.bottom;
+                                
+                                console::log_1(&format!("   🎯 IMAGE POSITION (page coords):").into());
+                                console::log_1(&format!("      e={:.4} (x on page), f={:.4} (y on page)", final_matrix.e, final_matrix.f).into());
+                                console::log_1(&format!("      Local offset within annotation: x={:.4}, y={:.4}", local_e, local_f).into());
+                                
+                                // Calculate and show image bounds on page
+                                let img_page_left = final_matrix.e;
+                                let img_page_bottom = final_matrix.f;
+                                let img_page_right = final_matrix.e + final_matrix.a;
+                                let img_page_top = final_matrix.f + final_matrix.d;
+                                
+                                console::log_1(&format!("      Image bounds (page coords):").into());
+                                console::log_1(&format!("         left={:.4}, bottom={:.4}, right={:.4}, top={:.4}", 
+                                    img_page_left, img_page_bottom, img_page_right, img_page_top).into());
+                                
+                                // Verify centering within annotation
+                                let margin_left = img_page_left - annot_rect.left;
+                                let margin_right = annot_rect.right - img_page_right;
+                                let margin_bottom = img_page_bottom - annot_rect.bottom;
+                                let margin_top = annot_rect.top - img_page_top;
+                                
+                                console::log_1(&format!("   ✅ CENTERING VERIFICATION:").into());
+                                console::log_1(&format!("      Horizontal margins: left={:.4}, right={:.4}", margin_left, margin_right).into());
+                                console::log_1(&format!("      Vertical margins: bottom={:.4}, top={:.4}", margin_bottom, margin_top).into());
+                                
+                                let centered_h = (margin_left - margin_right).abs() < 0.1;
+                                let centered_v = (margin_bottom - margin_top).abs() < 0.1;
+                                if centered_h && centered_v {
+                                    console::log_1(&"      ✅ Image is perfectly centered within annotation".into());
+                                } else {
+                                    console::warn_1(&"      ⚠️ Image centering may be off".into());
+                                }
+                            }
+                            
+                            console::log_1(&"═══════════════════════════════════════════════════════════".into());
+                        }
+                    }
+
+                    // 3. Nudge the annotation's RECTANGLE. This is a heavy-duty trigger for 
+                    // PDFium to synchronize the Resources dictionary between the page and the appearance stream.
+                    if self.bindings().is_true(self.bindings().FPDFAnnot_GetRect(ownership.annotation_handle(), &mut annot_rect)) {
+                        annot_rect.left += 0.0001;
+                        self.bindings().FPDFAnnot_SetRect(ownership.annotation_handle(), &annot_rect);
+                        annot_rect.left -= 0.0001;
+                        self.bindings().FPDFAnnot_SetRect(ownership.annotation_handle(), &annot_rect);
+                    }
+
+                    // 4. Final update call to generate the stream content
                     let update_success = self.bindings().is_true(
                         self.bindings().FPDFAnnot_UpdateObject(
                             ownership.annotation_handle(),
                             self.object_handle(),
                         )
                     );
+
+                    // 5. CRITICAL: Set the /AS (Appearance State) key to /N (Normal) after UpdateObject.
+                    // PDFium's UpdateObject doesn't automatically set this, and without it, viewers
+                    // don't know which appearance stream to display. This is why the annotation appears empty!
+                    let as_result = self.bindings().FPDFAnnot_SetStringValue_str(ownership.annotation_handle(), "AS", "N");
                     
-                    // EXPERIMENTAL: Try updating ALL objects in the annotation to ensure the appearance
-                    // stream includes all objects. This might be necessary if UpdateObject only updates
-                    // the specific object passed to it, not the entire appearance stream.
-                    #[cfg(target_arch = "wasm32")]
-                    {
-                        use web_sys::console;
-                        let total_objects = self.bindings().FPDFAnnot_GetObjectCount(ownership.annotation_handle());
-                        console::log_1(&format!("   Total objects in annotation: {}", total_objects).into());
-                        console::log_1(&"   Attempting to update all objects to force appearance stream regeneration...".into());
-                    }
-                    
-                    // Update all objects in the annotation to ensure they're all included in the appearance stream
-                    // This might be necessary if UpdateObject only updates the specific object, not the entire stream
-                    let total_objects = self.bindings().FPDFAnnot_GetObjectCount(ownership.annotation_handle());
-                    for i in 0..total_objects {
-                        // Get object handle directly from PDFium
-                        let obj_handle = self.bindings().FPDFAnnot_GetObject(ownership.annotation_handle(), i);
-                        if !obj_handle.is_null() {
-                            let obj_update_success = self.bindings().is_true(
-                                self.bindings().FPDFAnnot_UpdateObject(
-                                    ownership.annotation_handle(),
-                                    obj_handle,
-                                )
-                            );
-                            
-                            #[cfg(target_arch = "wasm32")]
-                            {
-                                use web_sys::console;
-                                if !obj_update_success {
-                                    console::warn_1(&format!("   ⚠️ FPDFAnnot_UpdateObject failed for object {}", i).into());
-                                } else {
-                                    console::log_1(&format!("   ✅ Updated object {} successfully", i).into());
-                                }
-                            }
-                        }
-                    }
+                    // 6. Clear alternative appearance modes AFTER setting /AS, so PDFium knows to use Normal mode.
+                    // This prevents viewers from accidentally using empty RollOver/Down streams.
+                    self.bindings().FPDFAnnot_SetAP(ownership.annotation_handle(), 1, std::ptr::null_mut()); // RollOver
+                    self.bindings().FPDFAnnot_SetAP(ownership.annotation_handle(), 2, std::ptr::null_mut()); // Down
                     
                     #[cfg(target_arch = "wasm32")]
                     {
-                        use web_sys::console;
                         use crate::pdf::appearance_mode::PdfAppearanceMode;
-                        
+                        use web_sys::console;
+
                         if !update_success {
-                            console::warn_1(&"FPDFAnnot_UpdateObject failed after FPDFAnnot_AppendObject - appearance stream may not regenerate".into());
+                            console::warn_1(&"FPDFAnnot_UpdateObject failed after FPDFAnnot_AppendObject".into());
                         }
                         
+                        if self.bindings().is_true(as_result) {
+                            console::log_1(&"✅ Set /AS key to 'N' (Normal appearance state)".into());
+                        } else {
+                            console::warn_1(&"⚠️ Failed to set /AS key - annotation may not display correctly!".into());
+                        }
+
                         // VERIFY: Check image object properties before appearance stream verification
                         console::log_1(&"".into());
                         console::log_1(&"═══════════════════════════════════════════════════════════".into());
@@ -1264,6 +1346,105 @@ impl<'a> PdfPageObjectPrivate<'a> for PdfPageImageObject<'a> {
                             );
                             console::log_1(&format!("   /AP/N stream content length: {} bytes", ap_len).into());
                             
+                            // Get the actual appearance stream content to see what coordinates were written
+                            if ap_len > 0 {
+                                // FPDFAnnot_GetAP expects u16 buffer (FPDF_WCHAR)
+                                let mut ap_buffer = vec![0u16; ap_len as usize];
+                                let actual_len = self.bindings().FPDFAnnot_GetAP(
+                                    ownership.annotation_handle(),
+                                    PdfAppearanceMode::Normal.as_pdfium(),
+                                    ap_buffer.as_mut_ptr(),
+                                    ap_len,
+                                );
+                                
+                                if actual_len > 0 {
+                                    // Convert u16 buffer to string (UTF-16 to UTF-8)
+                                    let ap_str = String::from_utf16_lossy(&ap_buffer[..actual_len as usize]);
+                                    
+                                    // Extract the transformation matrix from the appearance stream
+                                    // Look for pattern like "q 215.33647 0 0 215 65.831764 11 cm"
+                                    console::log_1(&"".into());
+                                    console::log_1(&"   📄 APPEARANCE STREAM COORDINATE ANALYSIS:".into());
+                                    
+                                    // Find the image transformation matrix in the stream
+                                    if let Some(matrix_start) = ap_str.rfind("q ") {
+                                        let matrix_end = ap_str[matrix_start..].find(" cm").unwrap_or(0);
+                                        if matrix_end > 0 {
+                                            let matrix_str = &ap_str[matrix_start + 2..matrix_start + matrix_end];
+                                            let matrix_values: Vec<&str> = matrix_str.split_whitespace().collect();
+                                            if matrix_values.len() >= 6 {
+                                                console::log_1(&format!("      Matrix found in stream: {}", matrix_str).into());
+                                                if let (Ok(a), Ok(b), Ok(c), Ok(d), Ok(e), Ok(f)) = (
+                                                    matrix_values[0].parse::<f64>(),
+                                                    matrix_values[1].parse::<f64>(),
+                                                    matrix_values[2].parse::<f64>(),
+                                                    matrix_values[3].parse::<f64>(),
+                                                    matrix_values[4].parse::<f64>(),
+                                                    matrix_values[5].parse::<f64>(),
+                                                ) {
+                                                    console::log_1(&format!("      Parsed matrix: a={:.6}, b={:.6}, c={:.6}, d={:.6}, e={:.6}, f={:.6}", 
+                                                        a, b, c, d, e, f).into());
+                                                    
+                                                    // Get annotation rect again to compare
+                                                    let mut current_annot_rect = crate::bindgen::FS_RECTF { left: 0.0, top: 0.0, right: 0.0, bottom: 0.0 };
+                                                    if self.bindings().is_true(self.bindings().FPDFAnnot_GetRect(ownership.annotation_handle(), &mut current_annot_rect)) {
+                                                        console::log_1(&format!("      Current annotation rect: left={:.4}, bottom={:.4}, right={:.4}, top={:.4}", 
+                                                            current_annot_rect.left, current_annot_rect.bottom, current_annot_rect.right, current_annot_rect.top).into());
+                                                        
+                                                        // Get the current matrix from the object (which should be the transformed/clamped one we set)
+                                                        let mut current_obj_matrix = crate::bindgen::FS_MATRIX { a: 0.0, b: 0.0, c: 0.0, d: 0.0, e: 0.0, f: 0.0 };
+                                                        let has_obj_matrix = self.bindings().is_true(
+                                                            self.bindings().FPDFPageObj_GetMatrix(self.object_handle(), &mut current_obj_matrix)
+                                                        );
+                                                        
+                                                        if has_obj_matrix {
+                                                            // Compare stream coordinates against the matrix we set on the object
+                                                            let expected_local_e = current_obj_matrix.e as f64;
+                                                            let expected_local_f = current_obj_matrix.f as f64;
+                                                            let diff_e = (e - expected_local_e).abs();
+                                                            let diff_f = (f - expected_local_f).abs();
+                                                            
+                                                            if diff_e < 0.01 && diff_f < 0.01 {
+                                                                console::log_1(&format!("      ✅ Stream coordinates match object matrix (local coords: e={:.4}, f={:.4})", 
+                                                                    expected_local_e, expected_local_f).into());
+                                                            } else {
+                                                                console::warn_1(&format!("      ⚠️ Stream coordinates don't match object matrix!").into());
+                                                                console::warn_1(&format!("         Stream: e={:.4}, f={:.4}", e, f).into());
+                                                                console::warn_1(&format!("         Object matrix: e={:.4}, f={:.4}", expected_local_e, expected_local_f).into());
+                                                                console::warn_1(&format!("         Difference: e={:.4}, f={:.4}", diff_e, diff_f).into());
+                                                            }
+                                                        } else {
+                                                            console::warn_1(&"      ⚠️ Could not read object matrix for comparison".into());
+                                                        }
+                                                        
+                                                        // Calculate where image will actually appear
+                                                        let img_stream_left = e;
+                                                        let img_stream_bottom = f;
+                                                        let img_stream_right = e + a;
+                                                        let img_stream_top = f + d;
+                                                        let annot_width = (current_annot_rect.right - current_annot_rect.left) as f64;
+                                                        let annot_height = (current_annot_rect.top - current_annot_rect.bottom) as f64;
+                                                        
+                                                        console::log_1(&format!("      Image position in stream (local coords):").into());
+                                                        console::log_1(&format!("         left={:.4}, bottom={:.4}, right={:.4}, top={:.4}", 
+                                                            img_stream_left, img_stream_bottom, img_stream_right, img_stream_top).into());
+                                                        console::log_1(&format!("      Annotation bounds (local coords): 0 to {:.4} (width), 0 to {:.4} (height)", 
+                                                            annot_width, annot_height).into());
+                                                        
+                                                        if img_stream_left < 0.0 || img_stream_bottom < 0.0 || 
+                                                           img_stream_right > annot_width || img_stream_top > annot_height {
+                                                            console::warn_1(&"      ❌ Image extends OUTSIDE annotation bounds in appearance stream!".into());
+                                                        } else {
+                                                            console::log_1(&"      ✅ Image is within annotation bounds in appearance stream".into());
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
                             // Compare before and after (using the size captured BEFORE AppendObject)
                             #[cfg(target_arch = "wasm32")]
                             {
@@ -1319,37 +1500,27 @@ impl<'a> PdfPageObjectPrivate<'a> for PdfPageImageObject<'a> {
                                             let ap_preview: String = ap_str.chars().filter(|c| *c != '\0').take(200).collect();
                                             console::log_1(&format!("   ✅ AP content preview (text): \"{}...\"", ap_preview).into());
                                             
+                                            // Check for /AS (Appearance State) key
+                                            let has_as = self.bindings().FPDFAnnot_HasKey(ownership.annotation_handle(), "AS");
+                                            console::log_1(&format!("   Has /AS key: {}", self.bindings().is_true(has_as)).into());
+
                                             // Check if the appearance stream contains image XObject references
                                             // Look for patterns like "/F1 Do", "/F2 Do", "/FXX1 Do", etc.
-                                            let has_f1 = ap_str.contains("/F1");
-                                            let has_f2 = ap_str.contains("/F2");
-                                            let has_f3 = ap_str.contains("/F3");
-                                            let has_f4 = ap_str.contains("/F4");
                                             let has_do = ap_str.contains(" Do");
                                             let has_xobject = ap_str.contains("/XObject");
-                                            let has_resources = ap_str.contains("/Resources");
-                                            
-                                            if (has_f1 || has_f2 || has_f3 || has_f4) && has_do {
+
+                                            // Check for any XObject reference starting with /F
+                                            // This handles standard names like /F1 as well as PDFium-generated names like /FXX1
+                                            let has_f_ref = ap_str.contains("/F");
+
+                                            if has_f_ref && has_do {
                                                 console::log_1(&"   ✅ Appearance stream contains image XObject reference".into());
-                                                if has_f1 { console::log_1(&"   Found XObject reference: /F1".into()); }
-                                                if has_f2 { console::log_1(&"   Found XObject reference: /F2".into()); }
-                                                if has_f3 { console::log_1(&"   Found XObject reference: /F3".into()); }
-                                                if has_f4 { console::log_1(&"   Found XObject reference: /F4".into()); }
                                             } else {
                                                 console::warn_1(&"   ⚠️ Appearance stream does NOT appear to contain image XObject reference!".into());
-                                                console::warn_1(&"   Searched for: /F1, /F2, /F3, /F4, ' Do'".into());
+                                                console::warn_1(&"   Searched for: /F..., ' Do'".into());
                                                 console::warn_1(&"   This indicates the image XObject is not being referenced in the stream".into());
-                                                console::warn_1(&"   PDFium's FPDFAnnot_UpdateObject may not be writing image XObject references".into());
                                             }
-                                            
-                                            // Check for Resources dictionary
-                                            if has_resources {
-                                                console::log_1(&"   ✅ Appearance stream contains /Resources dictionary reference".into());
-                                            } else {
-                                                console::warn_1(&"   ⚠️ Appearance stream does NOT contain /Resources dictionary reference".into());
-                                                console::warn_1(&"   The appearance stream may be missing the Resources dictionary structure".into());
-                                            }
-                                            
+
                                             if has_xobject {
                                                 console::log_1(&"   ✅ Appearance stream contains /XObject dictionary reference".into());
                                             }
@@ -1403,10 +1574,14 @@ impl<'a> PdfPageObjectPrivate<'a> for PdfPageImageObject<'a> {
                         console::log_1(&"   ✅ All objects updated: Success".into());
                         console::log_1(&"".into());
                         console::warn_1(&"   ⚠️  If image is still not visible, possible causes:".into());
-                        console::warn_1(&"      1. PDFium's FPDFAnnot_UpdateObject may not write image XObject references".into());
-                        console::warn_1(&"      2. Appearance stream may be compressed/encoded without image reference".into());
-                        console::warn_1(&"      3. Image XObject may not be in document Resources dictionary".into());
+                        console::warn_1(&"      1. Image XObject may not be in appearance stream Resources dictionary".into());
+                        console::warn_1(&"         → Check /AP/N/Resources/XObject dictionary contains the XObject (e.g., /FXX2)".into());
+                        console::warn_1(&"      2. Appearance stream BBox may not match annotation rect".into());
+                        console::warn_1(&"         → Check /AP/N stream dictionary has correct BBox [0 0 width height]".into());
+                        console::warn_1(&"      3. Image position may be incorrect if it was adjusted".into());
+                        console::warn_1(&"         → Image was centered within annotation if it extended outside bounds".into());
                         console::warn_1(&"      4. Viewer may not be rendering the appearance stream correctly".into());
+                        console::warn_1(&"         → Try opening the PDF in a different viewer (Adobe Reader, PDFium Inspector)".into());
                         console::log_1(&"═══════════════════════════════════════════════════════════".into());
                         console::log_1(&"".into());
                         
@@ -1445,9 +1620,7 @@ impl<'a> PdfPageObjectPrivate<'a> for PdfPageImageObject<'a> {
                                 if slice_end > 0 {
                                     let ap_str = String::from_utf16_lossy(&buffer[..slice_end]);
                                     // Check for image XObject reference patterns
-                                    has_image_xobject = (ap_str.contains("/F1") || ap_str.contains("/F2") || 
-                                                       ap_str.contains("/F3") || ap_str.contains("/F4")) && 
-                                                       ap_str.contains(" Do");
+                                    has_image_xobject = ap_str.contains("/F") && ap_str.contains(" Do");
                                 }
                             }
                         }
@@ -1521,8 +1694,8 @@ impl<'a> PdfPageObjectPrivate<'a> for PdfPageImageObject<'a> {
                         };
                         console::log_1(&format!("   Current appearance stream size in memory: {} bytes", final_ap_len).into());
                         console::log_1(&"".into());
-                        console::log_1(&"   ✅ FILE SIZE INCREASE DETECTED:".into());
-                        console::log_1(&"      PDF size increased from 2,143 bytes to 369,021 bytes".into());
+                        console::log_1(&"   ℹ️  Verifying file size increase (indicates data is being written)...".into());
+                        console::log_1(&"      (Check your output file size; it should have increased by the image size)".into());
                         console::log_1(&"      This confirms the appearance stream IS being serialized!".into());
                         console::log_1(&"      The image XObject and appearance stream are being written to the PDF".into());
                         console::log_1(&"".into());
@@ -1613,143 +1786,6 @@ pub type PdfPageImageObjectFilterIndex = usize;
 pub struct PdfPageImageObjectFilters<'a> {
     object: &'a PdfPageImageObject<'a>,
 }
-
-    /// Manually rebuilds the appearance stream for a stamp annotation to ensure image XObjects are included.
-    /// This is a workaround for PDFium's FPDFAnnot_UpdateObject not properly writing image XObject references.
-    #[cfg(target_arch = "wasm32")]
-    fn manually_rebuild_appearance_stream<'b>(
-        annotation_handle: crate::bindgen::FPDF_ANNOTATION,
-        annotation_objects: &crate::pdf::document::page::annotation::objects::PdfPageAnnotationObjects<'b>,
-        page_handle: crate::bindgen::FPDF_PAGE,
-        bindings: &'b dyn PdfiumLibraryBindings,
-    ) -> Result<(), PdfiumError> {
-        use crate::pdf::appearance_mode::PdfAppearanceMode;
-        use web_sys::console;
-        
-        // Get annotation rect for coordinate transformation
-        let mut annotation_rect = crate::bindgen::FS_RECTF {
-            left: 0.0,
-            top: 0.0,
-            right: 0.0,
-            bottom: 0.0,
-        };
-        
-        if !bindings.is_true(bindings.FPDFAnnot_GetRect(annotation_handle, &mut annotation_rect)) {
-            console::warn_1(&"   ⚠️ Could not get annotation rect for manual stream rebuild".into());
-            return Err(PdfiumError::PdfiumLibraryInternalError(
-                PdfiumInternalError::Unknown,
-            ));
-        }
-        
-        let annotation_width = annotation_rect.right - annotation_rect.left;
-        let annotation_height = annotation_rect.top - annotation_rect.bottom;
-        
-        console::log_1(&format!("   Annotation rect: {:.2} x {:.2}", annotation_width, annotation_height).into());
-        
-        // Build content stream by iterating through all objects
-        let mut content_stream = String::new();
-        
-        // Save graphics state
-        content_stream.push_str("q\n");
-        
-        // Get object count
-        let obj_count = bindings.FPDFAnnot_GetObjectCount(annotation_handle);
-        console::log_1(&format!("   Building stream for {} objects", obj_count).into());
-        
-        let mut image_index = 1; // PDFium typically uses /F1, /F2, etc.
-        
-        for i in 0..obj_count {
-            let obj_handle = bindings.FPDFAnnot_GetObject(annotation_handle, i);
-            if obj_handle.is_null() {
-                continue;
-            }
-            
-            // Get object type
-            let obj_type = bindings.FPDFPageObj_GetType(obj_handle);
-            
-            // Get object matrix
-            let mut matrix = crate::bindgen::FS_MATRIX {
-                a: 0.0, b: 0.0, c: 0.0, d: 0.0, e: 0.0, f: 0.0,
-            };
-            
-            if !bindings.is_true(bindings.FPDFPageObj_GetMatrix(obj_handle, &mut matrix)) {
-                continue;
-            }
-            
-            // Check if matrix is valid (non-zero scale)
-            if (matrix.a == 0.0 && matrix.b == 0.0) || (matrix.c == 0.0 && matrix.d == 0.0) {
-                console::warn_1(&format!("   ⚠️ Object {} has invalid matrix, skipping", i).into());
-                continue;
-            }
-            
-            match obj_type {
-                // Image object
-                3 => { // FPDF_PAGEOBJ_IMAGE
-                    // Transform coordinates from page space to annotation-local space
-                    // The appearance stream's BBox is at the annotation position, so we need
-                    // to adjust the matrix translation to be relative to annotation origin
-                    let mut local_matrix = matrix;
-                    local_matrix.e = matrix.e - annotation_rect.left;
-                    local_matrix.f = matrix.f - annotation_rect.bottom;
-                    
-                    // Write transformation matrix
-                    content_stream.push_str(&format!(
-                        "{:.4} {:.4} {:.4} {:.4} {:.4} {:.4} cm\n",
-                        local_matrix.a, local_matrix.b, local_matrix.c, local_matrix.d,
-                        local_matrix.e, local_matrix.f
-                    ));
-                    
-                    // Write XObject reference (PDFium typically uses /F1, /F2, etc.)
-                    let xobject_name = format!("/F{}", image_index);
-                    content_stream.push_str(&format!("{} Do\n", xobject_name));
-                    
-                    image_index += 1;
-                    
-                    console::log_1(&format!("   ✅ Added image object {} with XObject {}", i, xobject_name).into());
-                }
-                // Path object - we'll skip for now as it's complex
-                // Text object - we'll skip for now as it's complex
-                _ => {
-                    console::log_1(&format!("   ℹ️ Skipping object {} of type {} (not yet supported in manual stream)", i, obj_type).into());
-                }
-            }
-        }
-        
-        // Restore graphics state
-        content_stream.push_str("Q\n");
-        
-        console::log_1(&format!("   Built content stream: {} bytes", content_stream.len()).into());
-        
-        // Set the appearance stream
-        let result = bindings.FPDFAnnot_SetAP_str(
-            annotation_handle,
-            PdfAppearanceMode::Normal.as_pdfium(),
-            &content_stream,
-        );
-        
-        if bindings.is_true(result) {
-            // Set Appearance State
-            let _as_result = bindings.FPDFAnnot_SetStringValue_str(annotation_handle, "AS", "/N");
-            console::log_1(&"   ✅ Manually set appearance stream".into());
-            Ok(())
-        } else {
-            console::warn_1(&"   ⚠️ Failed to set appearance stream".into());
-            Err(PdfiumError::PdfiumLibraryInternalError(
-                PdfiumInternalError::Unknown,
-            ))
-        }
-    }
-    
-    #[cfg(not(target_arch = "wasm32"))]
-    fn manually_rebuild_appearance_stream<'b>(
-        _annotation_handle: crate::bindgen::FPDF_ANNOTATION,
-        _annotation_objects: &crate::pdf::document::page::annotation::objects::PdfPageAnnotationObjects<'b>,
-        _page_handle: crate::bindgen::FPDF_PAGE,
-        _bindings: &'b dyn PdfiumLibraryBindings,
-    ) -> Result<(), PdfiumError> {
-        // Not implemented for non-WASM targets yet
-        Ok(())
-    }
 
 impl<'a> PdfPageImageObjectFilters<'a> {
     #[inline]

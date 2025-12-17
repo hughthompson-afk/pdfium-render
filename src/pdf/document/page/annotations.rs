@@ -1281,12 +1281,9 @@ pub fn debug_annotation_appearance_streams(
                         log_info(&format!("   {} has PDF operators: {}", mode_name, has_operators));
                         
                         // Check for ExtGState reference (critical for opacity/flattening)
-                        let has_gs = content.contains("/GS gs");
-                        let has_gs1 = content.contains("/GS1 gs");
-                        log_info(&format!("   {} contains '/GS gs': {} (required for ExtGState)", mode_name, has_gs));
-                        if has_gs1 {
-                            log_info(&format!("   ⚠️  {} contains '/GS1 gs' (should be '/GS gs' to match PDFium)", mode_name));
-                        }
+                        // PDFium may use /GS gs, /GS1 gs, or generated names like /FXE1 gs
+                        let has_gs_ref = content.contains(" gs");
+                        log_info(&format!("   {} contains ExtGState reference (' gs'): {}", mode_name, has_gs_ref));
                     } else {
                         log_info(&format!("   {} content: (could not decode as UTF-16)", mode_name));
                     }
