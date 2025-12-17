@@ -4264,6 +4264,23 @@ pub trait PdfiumLibraryBindings {
         value: *mut c_float,
     ) -> FPDF_BOOL;
 
+    /// Sets the float value corresponding to `key` in `annot`'s dictionary.
+    ///
+    ///   `annot`  - handle to an annotation.
+    ///
+    ///   `key`    - the key to the dictionary entry, encoded in UTF-8.
+    ///
+    ///   `value`  - the float value to be set.
+    ///
+    /// Returns `true` if successful.
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetNumberValue(
+        &self,
+        annot: FPDF_ANNOTATION,
+        key: &str,
+        value: c_float,
+    ) -> FPDF_BOOL;
+
     /// Sets the AP (appearance string) in `annot`'s dictionary for a given
     /// `appearanceMode`.
     ///

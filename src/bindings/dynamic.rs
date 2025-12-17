@@ -1076,6 +1076,11 @@ pub(crate) struct DynamicPdfiumBindings {
         key: FPDF_BYTESTRING,
         value: *mut f32,
     ) -> FPDF_BOOL,
+    extern_FPDFAnnot_SetNumberValue: unsafe extern "C" fn(
+        annot: FPDF_ANNOTATION,
+        key: FPDF_BYTESTRING,
+        value: f32,
+    ) -> FPDF_BOOL,
     extern_FPDFAnnot_SetAP: unsafe extern "C" fn(
         annot: FPDF_ANNOTATION,
         appearanceMode: FPDF_ANNOT_APPEARANCEMODE,
@@ -3097,6 +3102,7 @@ impl DynamicPdfiumBindings {
             extern_FPDFAnnot_SetStringValue: *(Self::bind(&library, "FPDFAnnot_SetStringValue")?),
             extern_FPDFAnnot_GetStringValue: *(Self::bind(&library, "FPDFAnnot_GetStringValue")?),
             extern_FPDFAnnot_GetNumberValue: *(Self::bind(&library, "FPDFAnnot_GetNumberValue")?),
+            extern_FPDFAnnot_SetNumberValue: *(Self::bind(&library, "FPDFAnnot_SetNumberValue")?),
             extern_FPDFAnnot_SetAP: *(Self::bind(&library, "FPDFAnnot_SetAP")?),
             extern_FPDFAnnot_GetAP: *(Self::bind(&library, "FPDFAnnot_GetAP")?),
             extern_FPDFAnnot_GetLinkedAnnot: *(Self::bind(&library, "FPDFAnnot_GetLinkedAnnot")?),
@@ -6227,6 +6233,19 @@ impl PdfiumLibraryBindings for DynamicPdfiumBindings {
         let c_key = CString::new(key).unwrap();
 
         unsafe { (self.extern_FPDFAnnot_GetNumberValue)(annot, c_key.as_ptr(), value) }
+    }
+
+    #[inline]
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetNumberValue(
+        &self,
+        annot: FPDF_ANNOTATION,
+        key: &str,
+        value: f32,
+    ) -> FPDF_BOOL {
+        let c_key = CString::new(key).unwrap();
+
+        unsafe { (self.extern_FPDFAnnot_SetNumberValue)(annot, c_key.as_ptr(), value) }
     }
 
     #[inline]

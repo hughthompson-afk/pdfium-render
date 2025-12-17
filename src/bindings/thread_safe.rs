@@ -2241,6 +2241,17 @@ impl<T: PdfiumLibraryBindings> PdfiumLibraryBindings for ThreadSafePdfiumBinding
 
     #[inline]
     #[allow(non_snake_case)]
+    fn FPDFAnnot_SetNumberValue(
+        &self,
+        annot: FPDF_ANNOTATION,
+        key: &str,
+        value: c_float,
+    ) -> FPDF_BOOL {
+        self.bindings.FPDFAnnot_SetNumberValue(annot, key, value)
+    }
+
+    #[inline]
+    #[allow(non_snake_case)]
     fn FPDFAnnot_SetAP(
         &self,
         annot: FPDF_ANNOTATION,

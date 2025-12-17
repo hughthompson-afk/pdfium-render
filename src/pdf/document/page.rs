@@ -22,7 +22,7 @@ mod flatten; // Keep internal flatten operation private.
 use object::ownership::PdfPageObjectOwnership;
 
 use crate::bindgen::{
-    FLATTEN_FAIL, FLATTEN_NOTHINGTODO, FLATTEN_SUCCESS, FLAT_NORMALDISPLAY, FPDF_DOCUMENT, FPDF_FORMHANDLE,
+    FLATTEN_FAIL, FLATTEN_NOTHINGTODO, FLATTEN_SUCCESS, FLAT_NORMALDISPLAY, FPDF_ANNOT, FPDF_DOCUMENT, FPDF_FORMHANDLE,
     FPDF_PAGE,
 };
 use crate::bindings::PdfiumLibraryBindings;
@@ -969,6 +969,56 @@ impl<'a> PdfPage<'a> {
     pub fn flatten(&mut self) -> Result<(), PdfiumError> {
         // TODO: AJRC - 28/5/22 - consider allowing the caller to set the FLAT_NORMALDISPLAY or FLAT_PRINT flag.
         let flag = FLAT_NORMALDISPLAY;
+
+        // Trigger PDFium to automatically generate appearance streams for annotations
+        // by rendering the page with the FPDF_ANNOT flag before flattening.
+        // This ensures annotations without appearance streams get them generated automatically
+        // with proper opacity support via the /CA dictionary entry.
+        {
+            // Use actual page dimensions for rendering to ensure PDFium has proper context
+            // for generating appearance streams based on attachment points
+            let width = self.width().value as c_int;
+            let height = self.height().value as c_int;
+            
+            // Use reasonable dimensions (at least 100x100) to give PDFium enough context
+            // to properly generate appearance streams, but cap at page size to avoid excessive memory
+            let render_width = width.max(100).min(2000);
+            let render_height = height.max(100).min(2000);
+            
+            let bitmap = self.bindings().FPDFBitmap_Create(render_width, render_height, 1); // alpha=1
+            
+            if !bitmap.is_null() {
+                #[cfg(target_arch = "wasm32")]
+                {
+                    use web_sys::console;
+                    console::log_1(&format!("🔄 Rendering page with FPDF_ANNOT flag to trigger automatic appearance stream generation ({}x{})", render_width, render_height).into());
+                }
+                
+                // Render with FPDF_ANNOT flag to trigger appearance stream generation
+                // This will cause PDFium to automatically generate appearance streams for annotations
+                // that don't have them, with proper opacity support
+                // Using actual page dimensions ensures PDFium has proper context for attachment points
+                self.bindings().FPDF_RenderPageBitmap(
+                    bitmap,
+                    self.page_handle,
+                    0, // start_x
+                    0, // start_y
+                    render_width, // size_x - use page dimensions for proper context
+                    render_height, // size_y
+                    0, // rotate
+                    FPDF_ANNOT as c_int, // flags - render annotations to trigger appearance stream generation
+                );
+                
+                // Clean up the bitmap
+                self.bindings().FPDFBitmap_Destroy(bitmap);
+                
+                #[cfg(target_arch = "wasm32")]
+                {
+                    use web_sys::console;
+                    console::log_1(&"✅ Render completed - appearance streams should now be generated".into());
+                }
+            }
+        }
 
         // Debug all annotations before flattening
         #[cfg(target_arch = "wasm32")]

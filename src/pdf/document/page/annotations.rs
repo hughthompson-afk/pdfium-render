@@ -400,10 +400,15 @@ impl<'a> PdfPageAnnotations<'a> {
     pub fn create_highlight_annotation(
         &mut self,
     ) -> Result<PdfPageHighlightAnnotation<'a>, PdfiumError> {
-        self.create_annotation(
+        let mut annotation = self.create_annotation(
             PdfPageAnnotationType::Highlight,
             PdfPageHighlightAnnotation::from_pdfium,
-        )
+        )?;
+
+        // Generate appearance stream for flattening support
+        let _ = annotation.generate_appearance_stream();
+
+        Ok(annotation)
     }
 
     /// Creates a new [PdfPageInkAnnotation] in this [PdfPageAnnotations] collection,
@@ -492,10 +497,15 @@ impl<'a> PdfPageAnnotations<'a> {
     pub fn create_squiggly_annotation(
         &mut self,
     ) -> Result<PdfPageSquigglyAnnotation<'a>, PdfiumError> {
-        self.create_annotation(
+        let mut annotation = self.create_annotation(
             PdfPageAnnotationType::Squiggly,
             PdfPageSquigglyAnnotation::from_pdfium,
-        )
+        )?;
+
+        // Generate appearance stream for flattening support
+        let _ = annotation.generate_appearance_stream();
+
+        Ok(annotation)
     }
 
     /// Creates a new [PdfPageStampAnnotation] annotation in this [PdfPageAnnotations] collection,
@@ -522,10 +532,15 @@ impl<'a> PdfPageAnnotations<'a> {
     pub fn create_strikeout_annotation(
         &mut self,
     ) -> Result<PdfPageStrikeoutAnnotation<'a>, PdfiumError> {
-        self.create_annotation(
+        let mut annotation = self.create_annotation(
             PdfPageAnnotationType::Strikeout,
             PdfPageStrikeoutAnnotation::from_pdfium,
-        )
+        )?;
+
+        // Generate appearance stream for flattening support
+        let _ = annotation.generate_appearance_stream();
+
+        Ok(annotation)
     }
 
     /// Creates a new [PdfPageTextAnnotation] containing the given text in this [PdfPageAnnotations]
@@ -559,10 +574,15 @@ impl<'a> PdfPageAnnotations<'a> {
     pub fn create_underline_annotation(
         &mut self,
     ) -> Result<PdfPageUnderlineAnnotation<'a>, PdfiumError> {
-        self.create_annotation(
+        let mut annotation = self.create_annotation(
             PdfPageAnnotationType::Underline,
             PdfPageUnderlineAnnotation::from_pdfium,
-        )
+        )?;
+
+        // Generate appearance stream for flattening support
+        let _ = annotation.generate_appearance_stream();
+
+        Ok(annotation)
     }
 
     /// Creates a new [PdfPageCaretAnnotation] annotation in this [PdfPageAnnotations] collection,
@@ -950,6 +970,9 @@ impl<'a> PdfPageAnnotations<'a> {
             annotation.set_contents(contents)?;
         }
 
+        // Generate appearance stream for flattening support
+        let _ = annotation.generate_appearance_stream();
+
         Ok(annotation)
     }
 
@@ -987,6 +1010,9 @@ impl<'a> PdfPageAnnotations<'a> {
             annotation.set_height(bounds.height())?;
             annotation.set_contents(contents)?;
         }
+
+        // Generate appearance stream for flattening support
+        let _ = annotation.generate_appearance_stream();
 
         Ok(annotation)
     }
@@ -1026,6 +1052,9 @@ impl<'a> PdfPageAnnotations<'a> {
             annotation.set_contents(contents)?;
         }
 
+        // Generate appearance stream for flattening support
+        let _ = annotation.generate_appearance_stream();
+
         Ok(annotation)
     }
 
@@ -1063,6 +1092,9 @@ impl<'a> PdfPageAnnotations<'a> {
             annotation.set_height(bounds.height())?;
             annotation.set_contents(contents)?;
         }
+
+        // Generate appearance stream for flattening support
+        let _ = annotation.generate_appearance_stream();
 
         Ok(annotation)
     }
@@ -1235,8 +1267,8 @@ pub fn debug_annotation_appearance_streams(
                 if result == ap_len {
                     // Convert UTF-16LE to string and show preview
                     if let Ok(content) = String::from_utf16(&buffer[..buffer.len().saturating_sub(1)]) {
-                        let preview = if content.len() > 100 {
-                            format!("{}...", &content[..100])
+                        let preview = if content.len() > 1000 {
+                            format!("{}...", &content[..1000])
                         } else {
                             content.clone()
                         };
@@ -1247,6 +1279,14 @@ pub fn debug_annotation_appearance_streams(
                                           content.contains(" q") || content.contains(" Q") ||
                                           content.contains(" cm") || content.contains(" Do");
                         log_info(&format!("   {} has PDF operators: {}", mode_name, has_operators));
+                        
+                        // Check for ExtGState reference (critical for opacity/flattening)
+                        let has_gs = content.contains("/GS gs");
+                        let has_gs1 = content.contains("/GS1 gs");
+                        log_info(&format!("   {} contains '/GS gs': {} (required for ExtGState)", mode_name, has_gs));
+                        if has_gs1 {
+                            log_info(&format!("   ⚠️  {} contains '/GS1 gs' (should be '/GS gs' to match PDFium)", mode_name));
+                        }
                     } else {
                         log_info(&format!("   {} content: (could not decode as UTF-16)", mode_name));
                     }
@@ -1268,6 +1308,24 @@ pub fn debug_annotation_appearance_streams(
     // Check if annotation is marked as invisible or other flags that might affect flattening
     let flags = bindings.FPDFAnnot_GetFlags(annotation_handle);
     log_info(&format!("   Annotation flags: {} (0x{:X})", flags, flags));
+
+    // Check /ca (fill opacity) value - critical for flattening with opacity
+    let has_ca = bindings.FPDFAnnot_HasKey(annotation_handle, "ca");
+    if bindings.is_true(has_ca) {
+        let mut ca_value: f32 = 0.0;
+        let get_ca_result = bindings.FPDFAnnot_GetNumberValue(annotation_handle, "ca", &mut ca_value);
+        if bindings.is_true(get_ca_result) {
+            log_info(&format!("   /ca (fill opacity): {:.4} {}", ca_value, 
+                if ca_value < 1.0 { "(< 1.0, requires ExtGState Resources)" } else { "(= 1.0, no opacity)" }));
+            if ca_value < 1.0 {
+                log_info("   ⚠️  For flattening: Resources/ExtGState/GS/ca must be set to match /ca value");
+            }
+        } else {
+            log_info("   /ca key exists but could not read value");
+        }
+    } else {
+        log_info("   /ca (fill opacity): not set (defaults to 1.0)");
+    }
 
     log_info("═══════════════════════════════════════════════════════════");
 }

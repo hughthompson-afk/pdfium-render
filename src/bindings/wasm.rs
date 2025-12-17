@@ -475,6 +475,62 @@ impl PdfiumRenderWasmState {
         }
     }
 
+    /// Attempts to call a function in the PDFium WASM module, returning a Result instead of panicking.
+    /// This is useful for optional functions that may not exist in all PDFium builds.
+    fn try_call(
+        &self,
+        fn_name: &str,
+        return_type: JsFunctionArgumentType,
+        arg_types: Option<Vec<JsFunctionArgumentType>>,
+        args: Option<&JsValue>,
+    ) -> Result<JsValue, JsValue> {
+        fn js_value_from_argument_type(arg_type: JsFunctionArgumentType) -> JsValue {
+            match arg_type {
+                JsFunctionArgumentType::Void => JsValue::undefined(),
+                JsFunctionArgumentType::Number | JsFunctionArgumentType::Pointer => {
+                    JsValue::from(intern("number"))
+                }
+                JsFunctionArgumentType::String => JsValue::from(intern("string")),
+            }
+        }
+
+        let js_fn_name = JsValue::from(intern(fn_name));
+        let js_return_type = js_value_from_argument_type(return_type);
+
+        let js_arg_types = match arg_types {
+            Some(arg_types) => {
+                JsValue::from(
+                    arg_types
+                        .into_iter()
+                        .map(|arg_type| js_value_from_argument_type(arg_type))
+                        .collect::<Array>(),
+                )
+            }
+            None => JsValue::undefined(),
+        };
+
+        self.call_js_fn
+            .as_ref()
+            .unwrap()
+            .apply(
+                &JsValue::null(),
+                &Array::of4(
+                    &js_fn_name,
+                    &js_return_type,
+                    &js_arg_types,
+                    args.unwrap_or(&JsValue::undefined()),
+                ),
+            )
+            .map_err(|err| {
+                log::warn!(
+                    "pdfium-render::PdfiumRenderWasmState::try_call(): call to {:#?} failed: {:#?}",
+                    fn_name,
+                    err
+                );
+                err
+            })
+    }
+
     /// Returns a live view of Pdfium's WASM memory heap.
     fn heap_u8(&self) -> Uint8Array {
         match Reflect::get(
@@ -8230,6 +8286,10 @@ impl PdfiumLibraryBindings for WasmPdfiumBindings {
 
         let value_ptr = state.malloc(len);
 
+        // Initialize memory to zero before passing to PDFium
+        let zero_bytes = vec![0u8; len];
+        state.copy_bytes_to_pdfium_address(&zero_bytes, value_ptr);
+
         let c_key = CString::new(key).unwrap();
 
         let key_ptr = state.copy_bytes_to_pdfium(&c_key.into_bytes_with_nul());
@@ -8253,14 +8313,85 @@ impl PdfiumLibraryBindings for WasmPdfiumBindings {
             .unwrap() as FPDF_BOOL;
 
         if self.is_true(result) {
-            unsafe {
-                *value = state
-                    .copy_bytes_from_pdfium(value_ptr, len)
-                    .try_into()
-                    .map(c_float::from_le_bytes)
-                    .unwrap_or(0.0);
+            let bytes = state.copy_bytes_from_pdfium(value_ptr, len);
+            // Ensure we have exactly 4 bytes for a float
+            if bytes.len() == len {
+                unsafe {
+                    let float_bytes: [u8; 4] = match bytes.try_into() {
+                        Ok(b) => b,
+                        Err(_) => {
+                            log::warn!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_GetNumberValue(): failed to convert bytes to array, using zero");
+                            [0u8; 4]
+                        }
+                    };
+                    *value = c_float::from_le_bytes(float_bytes);
+                }
+            } else {
+                log::warn!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_GetNumberValue(): expected {} bytes but got {}, using zero", len, bytes.len());
+                unsafe {
+                    *value = 0.0;
+                }
             }
         }
+
+        state.free(value_ptr);
+        state.free(key_ptr);
+
+        result
+    }
+
+    #[allow(non_snake_case)]
+    fn FPDFAnnot_SetNumberValue(
+        &self,
+        annot: FPDF_ANNOTATION,
+        key: &str,
+        value: c_float,
+    ) -> FPDF_BOOL {
+        log::debug!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetNumberValue()");
+
+        let state = PdfiumRenderWasmState::lock();
+
+        let c_key = CString::new(key).unwrap();
+
+        let key_ptr = state.copy_bytes_to_pdfium(&c_key.into_bytes_with_nul());
+
+        let value_bytes = value.to_le_bytes();
+        let value_ptr = state.malloc(size_of::<c_float>());
+        state.copy_bytes_to_pdfium_address(&value_bytes, value_ptr);
+
+        // Try to call the function, but handle gracefully if it doesn't exist
+        let result = match state.try_call(
+            "FPDFAnnot_SetNumberValue",
+            JsFunctionArgumentType::Number,
+            Some(vec![
+                JsFunctionArgumentType::Pointer,
+                JsFunctionArgumentType::Pointer,
+                JsFunctionArgumentType::Pointer,
+            ]),
+            Some(&JsValue::from(Array::of3(
+                &Self::js_value_from_annotation(annot),
+                &Self::js_value_from_offset(key_ptr),
+                &Self::js_value_from_offset(value_ptr),
+            ))),
+        ) {
+            Ok(js_result) => {
+                match js_result.as_f64() {
+                    Some(v) => v as FPDF_BOOL,
+                    None => {
+                        log::warn!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetNumberValue(): function returned invalid result");
+                        state.free(value_ptr);
+                        state.free(key_ptr);
+                        return 0; // Return false
+                    }
+                }
+            }
+            Err(_) => {
+                log::warn!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetNumberValue(): function FPDFAnnot_SetNumberValue is not available in this PDFium build, opacity setting will be skipped");
+                state.free(value_ptr);
+                state.free(key_ptr);
+                return 0; // Return false
+            }
+        };
 
         state.free(value_ptr);
         state.free(key_ptr);

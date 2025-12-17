@@ -2225,6 +2225,19 @@ impl PdfiumLibraryBindings for StaticPdfiumBindings {
 
     #[inline]
     #[allow(non_snake_case)]
+    fn FPDFAnnot_SetNumberValue(
+        &self,
+        annot: FPDF_ANNOTATION,
+        key: &str,
+        value: f32,
+    ) -> FPDF_BOOL {
+        let c_key = CString::new(key).unwrap();
+
+        unsafe { crate::bindgen::FPDFAnnot_SetNumberValue(annot, c_key.as_ptr(), value) }
+    }
+
+    #[inline]
+    #[allow(non_snake_case)]
     fn FPDFAnnot_SetAP(
         &self,
         annot: FPDF_ANNOTATION,
