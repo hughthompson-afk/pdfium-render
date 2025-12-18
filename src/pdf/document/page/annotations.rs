@@ -516,10 +516,18 @@ impl<'a> PdfPageAnnotations<'a> {
     /// will be triggered on the page.
     #[inline]
     pub fn create_stamp_annotation(&mut self) -> Result<PdfPageStampAnnotation<'a>, PdfiumError> {
-        self.create_annotation(
+        let mut annotation = self.create_annotation(
             PdfPageAnnotationType::Stamp,
             PdfPageStampAnnotation::from_pdfium,
-        )
+        )?;
+
+        // Stamp annotations in PDFium often have a white background by default.
+        // We set the background to transparent to ensure that any images or text
+        // with transparency are rendered correctly.
+        let _ = annotation.set_fill_color(PdfColor::new(0, 0, 0, 0));
+        let _ = annotation.set_stroke_color(PdfColor::new(0, 0, 0, 0));
+
+        Ok(annotation)
     }
 
     /// Creates a new [PdfPageStrikeoutAnnotation] annotation in this [PdfPageAnnotations] collection,
@@ -793,7 +801,6 @@ impl<'a> PdfPageAnnotations<'a> {
             {
                 use crate::bindings::wasm::PdfiumRenderWasmState;
                 use js_sys::Array as JsArray;
-                use wasm_bindgen::JsValue;
                 // Get write access to store the bytes
                 let mut state = PdfiumRenderWasmState::lock_mut();
                 // Convert Vec<Vec<u8>> to JavaScript Array of Uint8Arrays

@@ -31,6 +31,9 @@ pub struct PdfPageAnnotationObjects<'a> {
     annotation_handle: FPDF_ANNOTATION,
     ownership: PdfPageObjectOwnership,
     bindings: &'a dyn PdfiumLibraryBindings,
+    /// A shared cache for the annotation's current color, used to synchronize
+    /// child objects (like text) when they are added to the annotation.
+    pub(crate) sync_color: std::cell::Cell<Option<crate::pdf::color::PdfColor>>,
 }
 
 impl<'a> PdfPageAnnotationObjects<'a> {
@@ -49,6 +52,7 @@ impl<'a> PdfPageAnnotationObjects<'a> {
                 annotation_handle,
             ),
             bindings,
+            sync_color: std::cell::Cell::new(None),
         }
     }
 

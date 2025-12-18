@@ -8,7 +8,6 @@ use crate::pdf::document::page::field::options::PdfFormFieldOptions;
 use crate::pdf::document::page::field::private::internal::{
     PdfFormFieldFlags, PdfFormFieldPrivate,
 };
-use chrono::Utc;
 
 #[cfg(doc)]
 use {

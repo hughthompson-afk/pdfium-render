@@ -8,7 +8,8 @@ pub(crate) mod internal {
     // inside this pub(crate) module in order to prevent it from being visible outside the crate.
 
     use crate::bindgen::{
-        FPDF_ANNOTATION, FPDF_DOCUMENT, FPDF_PAGE, FPDF_PAGEOBJECT, FS_MATRIX, FS_RECTF,
+        FPDF_ANNOTATION, FPDF_ANNOT_STAMP, FPDF_DOCUMENT, FPDF_PAGE, FPDF_PAGEOBJECT, FS_MATRIX,
+        FS_RECTF,
     };
     use crate::bindings::PdfiumLibraryBindings;
     use crate::error::{PdfiumError, PdfiumInternalError};
@@ -177,6 +178,124 @@ pub(crate) mod internal {
                             ownership.page_handle(),
                             ownership.annotation_handle(),
                         ));
+
+                        // CRITICAL: After adding the object, call FPDFAnnot_UpdateObject to ensure
+                        // the appearance stream is regenerated.
+
+                        // For Stamp annotations, we set Intent and Name and ensure PAGE coordinates are used.
+                        let is_stamp = self.bindings().FPDFAnnot_GetSubtype(ownership.annotation_handle()) as u32 == FPDF_ANNOT_STAMP;
+
+                        if is_stamp {
+                            // 1. Set Intent and Name for Stamp annotations
+                            self.bindings().FPDFAnnot_SetStringValue_str(
+                                ownership.annotation_handle(),
+                                "IT",
+                                "Design",
+                            );
+                            self.bindings().FPDFAnnot_SetStringValue_str(
+                                ownership.annotation_handle(),
+                                "Name",
+                                "Draft",
+                            );
+
+                            // 1.5 Set color to transparent to avoid white background.
+                            // Some PDF viewers (like Adobe) render stamp annotations with a white background
+                            // if no color is specified.
+                            self.bindings().FPDFAnnot_SetColor(
+                                ownership.annotation_handle(),
+                                crate::bindgen::FPDFANNOT_COLORTYPE_FPDFANNOT_COLORTYPE_Color,
+                                0,
+                                0,
+                                0,
+                                0,
+                            );
+                            self.bindings().FPDFAnnot_SetColor(
+                                ownership.annotation_handle(),
+                                crate::bindgen::FPDFANNOT_COLORTYPE_FPDFANNOT_COLORTYPE_InteriorColor,
+                                0,
+                                0,
+                                0,
+                                0,
+                            );
+
+                            // 2. Adjust the object's matrix to use PAGE coordinates.
+                            // PDFium's flattening may not properly transform local coords to page coords
+                            // for stamp annotations, so we use page coordinates directly.
+                            let mut annot_rect = FS_RECTF {
+                                left: 0.0,
+                                top: 0.0,
+                                right: 0.0,
+                                bottom: 0.0,
+                            };
+                            let mut matrix = FS_MATRIX {
+                                a: 0.0,
+                                b: 0.0,
+                                c: 0.0,
+                                d: 0.0,
+                                e: 0.0,
+                                f: 0.0,
+                            };
+
+                            // Get annotation rect and current object matrix
+                            let has_annot_rect = self.bindings().is_true(
+                                self.bindings()
+                                    .FPDFAnnot_GetRect(ownership.annotation_handle(), &mut annot_rect),
+                            );
+                            let has_matrix = self.bindings().is_true(
+                                self.bindings()
+                                    .FPDFPageObj_GetMatrix(self.object_handle(), &mut matrix),
+                            );
+
+                            if has_annot_rect && has_matrix {
+                                // Convert local coordinates to PAGE coordinates by adding the annotation's offset.
+                                // This ensures the object appears at the correct position on the page when flattened.
+                                matrix.e += annot_rect.left;
+                                matrix.f += annot_rect.bottom;
+
+                                self.bindings()
+                                    .FPDFPageObj_SetMatrix(self.object_handle(), &matrix);
+                            }
+
+                            // 3. Nudge the annotation's RECTANGLE. This is a heavy-duty trigger for
+                            // PDFium to synchronize the Resources dictionary between the page and the appearance stream.
+                            if self.bindings().is_true(
+                                self.bindings()
+                                    .FPDFAnnot_GetRect(ownership.annotation_handle(), &mut annot_rect),
+                            ) {
+                                annot_rect.left += 0.0001;
+                                self.bindings()
+                                    .FPDFAnnot_SetRect(ownership.annotation_handle(), &annot_rect);
+                                annot_rect.left -= 0.0001;
+                                self.bindings()
+                                    .FPDFAnnot_SetRect(ownership.annotation_handle(), &annot_rect);
+                            }
+
+                            // 4. Final update call to generate the stream content
+                            self.bindings().FPDFAnnot_UpdateObject(
+                                ownership.annotation_handle(),
+                                self.object_handle(),
+                            );
+
+                            // 5. CRITICAL: Set the /AS (Appearance State) key to /N (Normal) after UpdateObject.
+                            self.bindings().FPDFAnnot_SetStringValue_str(
+                                ownership.annotation_handle(),
+                                "AS",
+                                "N",
+                            );
+
+                            // 6. Clear alternative appearance modes
+                            self.bindings().FPDFAnnot_SetAP(
+                                ownership.annotation_handle(),
+                                1,
+                                std::ptr::null_mut(),
+                            ); // RollOver
+                            self.bindings().FPDFAnnot_SetAP(
+                                ownership.annotation_handle(),
+                                2,
+                                std::ptr::null_mut(),
+                            ); // Down
+                        }
+
                         self.regenerate_content_after_mutation()
                     } else {
                         Err(PdfiumError::PdfiumLibraryInternalError(

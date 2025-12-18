@@ -463,6 +463,10 @@ pub(crate) mod internal {
                     console::log_1(&"✅ Fill color successfully written to /IC dictionary".into());
                     console::log_1(&"═══════════════════════════════════════════════════════════".into());
                 }
+
+                // Cache the color so that any child objects (like text) can synchronize with it.
+                self.objects_impl().sync_color.set(Some(fill_color));
+
                 Ok(())
             } else {
                 // The FPDFAnnot_SetColor() function returns false if the annotation
@@ -594,6 +598,10 @@ pub(crate) mod internal {
                     console::log_1(&"✅ Stroke color successfully written to /C dictionary".into());
                     console::log_1(&"═══════════════════════════════════════════════════════════".into());
                 }
+
+                // Cache the color so that any child objects (like text) can synchronize with it.
+                self.objects_impl().sync_color.set(Some(stroke_color));
+
                 Ok(())
             } else {
                 // The FPDFAnnot_SetColor() function returns false if the annotation

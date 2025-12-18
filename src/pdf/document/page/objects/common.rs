@@ -8,6 +8,7 @@ use crate::pdf::document::page::object::image::PdfPageImageObject;
 use crate::pdf::document::page::object::path::PdfPagePathObject;
 use crate::pdf::document::page::object::text::PdfPageTextObject;
 use crate::pdf::document::page::object::x_object_form::PdfPageXObjectFormObject;
+use crate::pdf::document::page::object::private::internal::PdfPageObjectPrivate;
 use crate::pdf::document::page::object::{PdfPageObject, PdfPageObjectCommon};
 use crate::pdf::document::page::objects::private::internal::PdfPageObjectsPrivate;
 use crate::pdf::document::page::PdfPageObjectOwnership;
@@ -602,7 +603,8 @@ where
         width: Option<PdfPoints>,
         height: Option<PdfPoints>,
     ) -> Result<PdfPageObject<'a>, PdfiumError> {
-        let document_handle = match self.ownership() {
+        let ownership = self.ownership();
+        let document_handle = match ownership {
             PdfPageObjectOwnership::Page(ownership) => Some(ownership.document_handle()),
             PdfPageObjectOwnership::AttachedAnnotation(ownership) => {
                 Some(ownership.document_handle())
@@ -619,6 +621,10 @@ where
             let image_height = image.height();
 
             let mut object = PdfPageImageObject::new_from_handle(document_handle, self.bindings())?;
+
+            // Temporarily set ownership so set_image can find the page handle if it's available.
+            // This is critical for preserving transparency/alpha in image objects.
+            object.set_ownership(*ownership);
 
             object.set_image(image)?;
 

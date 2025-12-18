@@ -257,8 +257,8 @@ impl<'a> PdfPageWatermarkAnnotation<'a> {
         let text_height_estimate = font_size;
         
         // After rotation, the bounding box of the text will be larger
-        let rotated_width = (text_width_estimate * cos_theta.abs() + text_height_estimate * sin_theta.abs());
-        let rotated_height = (text_width_estimate * sin_theta.abs() + text_height_estimate * cos_theta.abs());
+        let rotated_width = text_width_estimate * cos_theta.abs() + text_height_estimate * sin_theta.abs();
+        let rotated_height = text_width_estimate * sin_theta.abs() + text_height_estimate * cos_theta.abs();
         
         // Center the rotated text
         let tx = center_x - (rotated_width / 2.0);
@@ -289,7 +289,7 @@ impl<'a> PdfPageWatermarkAnnotation<'a> {
         let r_val = fill_color.red() as f32 / 255.0;
         let g_val = fill_color.green() as f32 / 255.0;
         let b_val = fill_color.blue() as f32 / 255.0;
-        let alpha = fill_color.alpha() as f32 / 255.0;
+        let _alpha = fill_color.alpha() as f32 / 255.0;
 
         // Use RG for RGB color
         stream.push_str(&format!("{:.4} {:.4} {:.4} rg\n", r_val, g_val, b_val));

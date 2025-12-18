@@ -34,10 +34,10 @@ impl PdfiumApiVersion {
         #[cfg(feature = "pdfium_future")]
         return PdfiumApiVersion::Future;
 
-        #[cfg(feature = "pdfium_7543")]
+        #[cfg(all(feature = "pdfium_7543", not(feature = "pdfium_future")))]
         return PdfiumApiVersion::V7543;
 
-        #[cfg(feature = "pdfium_7350")]
+        #[cfg(all(feature = "pdfium_7350", not(any(feature = "pdfium_future", feature = "pdfium_7543"))))]
         return PdfiumApiVersion::V7350;
 
         #[cfg(feature = "pdfium_7215")]

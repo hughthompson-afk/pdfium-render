@@ -712,20 +712,30 @@ impl<'a> PdfPageImageObject<'a> {
 
     /// Applies the byte data in the given [PdfBitmap] to this [PdfPageImageObject].
     pub fn set_bitmap(&mut self, bitmap: &PdfBitmap) -> Result<(), PdfiumError> {
-        if self
-            .bindings
-            .is_true(self.bindings().FPDFImageObj_SetBitmap(
-                std::ptr::null_mut::<FPDF_PAGE>(),
-                0,
-                self.object_handle(),
-                bitmap.handle(),
-            ))
-        {
-            Ok(())
+        let page_handle = match self.ownership() {
+            PdfPageObjectOwnership::Page(ownership) => ownership.page_handle(),
+            PdfPageObjectOwnership::AttachedAnnotation(ownership) => ownership.page_handle(),
+            _ => std::ptr::null_mut(),
+        };
+
+        if !page_handle.is_null() {
+            self.set_bitmap_with_page_handle(bitmap.handle(), page_handle)
         } else {
-            Err(PdfiumError::PdfiumLibraryInternalError(
-                PdfiumInternalError::Unknown,
-            ))
+            if self
+                .bindings
+                .is_true(self.bindings().FPDFImageObj_SetBitmap(
+                    std::ptr::null_mut::<FPDF_PAGE>(),
+                    0,
+                    self.object_handle(),
+                    bitmap.handle(),
+                ))
+            {
+                Ok(())
+            } else {
+                Err(PdfiumError::PdfiumLibraryInternalError(
+                    PdfiumInternalError::Unknown,
+                ))
+            }
         }
     }
 
@@ -881,8 +891,8 @@ impl<'a> PdfPageImageObject<'a> {
     #[cfg(target_arch = "wasm32")]
     fn manually_rebuild_appearance_stream<'b>(
         annotation_handle: crate::bindgen::FPDF_ANNOTATION,
-        annotation_objects: &crate::pdf::document::page::annotation::objects::PdfPageAnnotationObjects<'b>,
-        page_handle: crate::bindgen::FPDF_PAGE,
+        _annotation_objects: &crate::pdf::document::page::annotation::objects::PdfPageAnnotationObjects<'b>,
+        _page_handle: crate::bindgen::FPDF_PAGE,
         bindings: &'b dyn PdfiumLibraryBindings,
     ) -> Result<(), PdfiumError> {
         use crate::pdf::appearance_mode::PdfAppearanceMode;
@@ -1060,32 +1070,6 @@ impl<'a> PdfPageObjectPrivate<'a> for PdfPageImageObject<'a> {
         // Validate the matrix before adding
         self.validate_matrix()?;
 
-        // Check if the image object has bitmap data
-        // For annotations, we need to ensure FPDFImageObj_SetBitmap was called with a valid page handle
-        // to create the internal CPDF_Stream. This is critical for image persistence when saving PDFs.
-        if self.has_bitmap_data() {
-            // Get the bitmap handle and page handle first (before any mutable operations)
-            let bitmap_handle = self.bindings().FPDFImageObj_GetBitmap(self.object_handle());
-            
-            // Get the page handle from the annotation ownership if available
-            // Access ownership through the PdfPageObjectsPrivate trait
-            let page_handle_opt = match annotation_objects.ownership() {
-                PdfPageObjectOwnership::AttachedAnnotation(ownership) => {
-                    Some(ownership.page_handle())
-                }
-                _ => None,
-            };
-
-            // If we have a page handle and a valid bitmap, re-call FPDFImageObj_SetBitmap with it
-            // This ensures the internal CPDF_Stream is properly created.
-            // The WASM bindings now handle memory allocation correctly.
-            if let Some(page_handle) = page_handle_opt {
-                if !bitmap_handle.is_null() && !page_handle.is_null() {
-                    self.set_bitmap_with_page_handle(bitmap_handle, page_handle)?;
-                }
-            }
-        }
-
         // Now proceed with the standard annotation addition logic
         match annotation_objects.ownership() {
             PdfPageObjectOwnership::AttachedAnnotation(ownership) => {
@@ -1126,6 +1110,26 @@ impl<'a> PdfPageObjectPrivate<'a> for PdfPageImageObject<'a> {
                     // 1. Set Intent and Name for Stamp annotations
                     self.bindings().FPDFAnnot_SetStringValue_str(ownership.annotation_handle(), "IT", "Design");
                     self.bindings().FPDFAnnot_SetStringValue_str(ownership.annotation_handle(), "Name", "Draft");
+
+                    // 1.5 Set color to transparent to avoid white background.
+                    // Some PDF viewers (like Adobe) render stamp annotations with a white background
+                    // if no color is specified.
+                    self.bindings().FPDFAnnot_SetColor(
+                        ownership.annotation_handle(),
+                        crate::bindgen::FPDFANNOT_COLORTYPE_FPDFANNOT_COLORTYPE_Color,
+                        0,
+                        0,
+                        0,
+                        0,
+                    );
+                    self.bindings().FPDFAnnot_SetColor(
+                        ownership.annotation_handle(),
+                        crate::bindgen::FPDFANNOT_COLORTYPE_FPDFANNOT_COLORTYPE_InteriorColor,
+                        0,
+                        0,
+                        0,
+                        0,
+                    );
 
                     // 2. FORCE center the image within the annotation bounds.
                     // We ignore the caller's position and recalculate to guarantee correct positioning.
@@ -1251,12 +1255,14 @@ impl<'a> PdfPageObjectPrivate<'a> for PdfPageImageObject<'a> {
                     // 5. CRITICAL: Set the /AS (Appearance State) key to /N (Normal) after UpdateObject.
                     // PDFium's UpdateObject doesn't automatically set this, and without it, viewers
                     // don't know which appearance stream to display. This is why the annotation appears empty!
-                    let as_result = self.bindings().FPDFAnnot_SetStringValue_str(ownership.annotation_handle(), "AS", "N");
+                    let _as_result = self.bindings().FPDFAnnot_SetStringValue_str(ownership.annotation_handle(), "AS", "N");
                     
                     // 6. Clear alternative appearance modes AFTER setting /AS, so PDFium knows to use Normal mode.
                     // This prevents viewers from accidentally using empty RollOver/Down streams.
                     self.bindings().FPDFAnnot_SetAP(ownership.annotation_handle(), 1, std::ptr::null_mut()); // RollOver
                     self.bindings().FPDFAnnot_SetAP(ownership.annotation_handle(), 2, std::ptr::null_mut()); // Down
+
+                    let _ = update_success;
                     
                     #[cfg(target_arch = "wasm32")]
                     {
@@ -1267,7 +1273,7 @@ impl<'a> PdfPageObjectPrivate<'a> for PdfPageImageObject<'a> {
                             console::warn_1(&"FPDFAnnot_UpdateObject failed after FPDFAnnot_AppendObject".into());
                         }
                         
-                        if self.bindings().is_true(as_result) {
+                        if self.bindings().is_true(_as_result) {
                             console::log_1(&"✅ Set /AS key to 'N' (Normal appearance state)".into());
                         } else {
                             console::warn_1(&"⚠️ Failed to set /AS key - annotation may not display correctly!".into());

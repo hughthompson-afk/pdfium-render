@@ -6,7 +6,6 @@ use crate::bindings::PdfiumLibraryBindings;
 use crate::error::PdfiumError;
 use crate::pdf::color::PdfColor;
 use crate::pdf::document::page::annotation::attachment_points::PdfPageAnnotationAttachmentPoints;
-use crate::pdf::document::page::annotation::free_text_appearance::FreeTextAppearanceBuilder;
 use crate::pdf::document::page::annotation::objects::PdfPageAnnotationObjects;
 use crate::pdf::document::page::annotation::private::internal::PdfPageAnnotationPrivate;
 use crate::pdf::document::page::annotation::PdfPageAnnotationCommon;

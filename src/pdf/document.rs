@@ -14,7 +14,9 @@ pub mod permissions;
 pub mod signature;
 pub mod signatures;
 
-use crate::bindgen::{FPDF_DOCUMENT, FPDF_FORMHANDLE};
+use crate::bindgen::FPDF_DOCUMENT;
+#[cfg(feature = "pdfium_future")]
+use crate::bindgen::FPDF_FORMHANDLE;
 use crate::bindings::PdfiumLibraryBindings;
 use crate::error::PdfiumError;
 use crate::error::PdfiumInternalError;
@@ -28,9 +30,12 @@ use crate::pdf::document::permissions::PdfPermissions;
 use crate::pdf::document::signatures::PdfSignatures;
 use crate::utils::files::get_pdfium_file_writer_from_writer;
 use crate::utils::files::FpdfFileAccessExt;
+use once_cell::sync::OnceCell;
 use std::fmt::{Debug, Formatter};
 use std::io::Cursor;
 use std::io::Write;
+
+static DEBUG_ONCE: OnceCell<()> = OnceCell::new();
 
 #[cfg(not(target_arch = "wasm32"))]
 use std::fs::File;
@@ -181,6 +186,49 @@ impl<'a> PdfDocument<'a> {
 
         let pages =
             PdfPages::from_pdfium(handle, form.as_ref().map(|form| form.handle()), bindings);
+
+        // Debug all annotations only when the first document is loaded
+        DEBUG_ONCE.get_or_init(|| {
+            #[cfg(target_arch = "wasm32")]
+            use web_sys::console;
+            use crate::pdf::document::page::annotations::debug_annotation_appearance_streams;
+
+            let log_info = |_message: &str| {
+                #[cfg(not(target_arch = "wasm32"))]
+                println!("{}", _message);
+                #[cfg(target_arch = "wasm32")]
+                console::log_1(&_message.into());
+            };
+
+            log_info("🔍 DEBUGGING ALL ANNOTATIONS ON FIRST DOCUMENT LOAD");
+            log_info("═══════════════════════════════════════════════════════════");
+
+            let page_count = bindings.FPDF_GetPageCount(handle);
+            log_info(&format!("   Total pages: {}", page_count));
+
+            for i in 0..page_count {
+                let page_handle = bindings.FPDF_LoadPage(handle, i as std::os::raw::c_int);
+                if !page_handle.is_null() {
+                    let annotation_count = bindings.FPDFPage_GetAnnotCount(page_handle);
+                    if annotation_count > 0 {
+                        log_info(&format!("   Page {}: {} annotations", i, annotation_count));
+                        for j in 0..annotation_count {
+                            let annot_handle =
+                                bindings.FPDFPage_GetAnnot(page_handle, j as std::os::raw::c_int);
+                            if !annot_handle.is_null() {
+                                debug_annotation_appearance_streams(
+                                    annot_handle,
+                                    bindings,
+                                    &format!("Page {} Annotation {}", i, j),
+                                );
+                            }
+                        }
+                    }
+                    bindings.FPDF_ClosePage(page_handle);
+                }
+            }
+            log_info("═══════════════════════════════════════════════════════════");
+        });
 
         PdfDocument {
             handle,

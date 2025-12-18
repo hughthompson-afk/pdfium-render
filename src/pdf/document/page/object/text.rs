@@ -516,6 +516,327 @@ impl<'a> PdfPageObjectPrivate<'a> for PdfPageTextObject<'a> {
         self.bindings
     }
 
+    fn add_object_to_annotation(
+        &mut self,
+        annotation_objects: &crate::pdf::document::page::annotation::objects::PdfPageAnnotationObjects,
+    ) -> Result<(), PdfiumError> {
+        use crate::pdf::document::page::objects::private::internal::PdfPageObjectsPrivate;
+
+        // Now proceed with the standard annotation addition logic
+        match annotation_objects.ownership() {
+            PdfPageObjectOwnership::AttachedAnnotation(ownership) => {
+                let annot_handle = ownership.annotation_handle();
+
+                // For Stamp annotations, we set Intent and Name, sync color, and ensure centered PAGE coordinates are used.
+                let is_stamp = self.bindings().FPDFAnnot_GetSubtype(annot_handle) as u32
+                    == crate::bindgen::FPDF_ANNOT_STAMP;
+
+                if is_stamp {
+                    #[cfg(target_arch = "wasm32")]
+                    use web_sys::console;
+
+                    #[cfg(target_arch = "wasm32")]
+                    console::log_1(&"📝 TEXT POSITIONING & COLOR SYNC (Stamp Annotation)".into());
+
+                    // 1. Check if the objects collection has a cached color from its parent annotation
+                    let mut sync_color = annotation_objects.sync_color.get();
+
+                    let mut r: std::os::raw::c_uint = 0;
+                    let mut g: std::os::raw::c_uint = 0;
+                    let mut b: std::os::raw::c_uint = 0;
+                    let mut a: std::os::raw::c_uint = 0;
+
+                    if let Some(_color) = sync_color {
+                        #[cfg(target_arch = "wasm32")]
+                        console::log_1(
+                            &format!(
+                                "   🎨 Using CACHED color from parent annotation: r={}, g={}, b={}",
+                                _color.red(),
+                                _color.green(),
+                                _color.blue()
+                            )
+                            .into(),
+                        );
+                    } else {
+                        // 0. NUDGE the rectangle BEFORE reading color.
+                        // This is a known trick to force PDFium to synchronize the dictionary
+                        // with its internal state, making FPDFAnnot_GetColor more reliable.
+                        let mut temp_rect = crate::bindgen::FS_RECTF {
+                            left: 0.0,
+                            top: 0.0,
+                            right: 0.0,
+                            bottom: 0.0,
+                        };
+                        if self.bindings().is_true(
+                            self.bindings().FPDFAnnot_GetRect(annot_handle, &mut temp_rect),
+                        ) {
+                            temp_rect.left += 0.00001;
+                            self.bindings().FPDFAnnot_SetRect(annot_handle, &temp_rect);
+                            temp_rect.left -= 0.00001;
+                            self.bindings().FPDFAnnot_SetRect(annot_handle, &temp_rect);
+                        }
+
+                        // Try border color (/C)
+                        if self.bindings().is_true(self.bindings().FPDFAnnot_GetColor(
+                            annot_handle,
+                            crate::bindgen::FPDFANNOT_COLORTYPE_FPDFANNOT_COLORTYPE_Color,
+                            &mut r,
+                            &mut g,
+                            &mut b,
+                            &mut a,
+                        )) {
+                            #[cfg(target_arch = "wasm32")]
+                            console::log_1(
+                                &format!("   🎨 Found border color: r={}, g={}, b={}", r, g, b).into(),
+                            );
+                            sync_color = Some(crate::pdf::color::PdfColor::new(
+                                r as u8, g as u8, b as u8, a as u8,
+                            ));
+                        } else if self.bindings().is_true(self.bindings().FPDFAnnot_GetColor(
+                            annot_handle,
+                            crate::bindgen::FPDFANNOT_COLORTYPE_FPDFANNOT_COLORTYPE_InteriorColor,
+                            &mut r,
+                            &mut g,
+                            &mut b,
+                            &mut a,
+                        )) {
+                            #[cfg(target_arch = "wasm32")]
+                            console::log_1(
+                                &format!("   🎨 Found interior color: r={}, g={}, b={}", r, g, b).into(),
+                            );
+                            sync_color = Some(crate::pdf::color::PdfColor::new(
+                                r as u8, g as u8, b as u8, a as u8,
+                            ));
+                        }
+                    }
+
+                    if self
+                        .bindings()
+                        .is_true(self.bindings().FPDFAnnot_AppendObject(
+                            annot_handle,
+                            self.object_handle(),
+                        ))
+                    {
+                        self.set_ownership(PdfPageObjectOwnership::owned_by_attached_annotation(
+                            ownership.document_handle(),
+                            ownership.page_handle(),
+                            annot_handle,
+                        ));
+
+                        // 2. Set Intent and Name
+                        self.bindings()
+                            .FPDFAnnot_SetStringValue_str(annot_handle, "IT", "Design");
+                        self.bindings()
+                            .FPDFAnnot_SetStringValue_str(annot_handle, "Name", "Draft");
+
+                        // 2.5 Set color to transparent to avoid white background.
+                        // Some PDF viewers (like Adobe) render stamp annotations with a white background
+                        // if no color is specified.
+                        self.bindings().FPDFAnnot_SetColor(
+                            annot_handle,
+                            crate::bindgen::FPDFANNOT_COLORTYPE_FPDFANNOT_COLORTYPE_Color,
+                            0,
+                            0,
+                            0,
+                            0,
+                        );
+                        self.bindings().FPDFAnnot_SetColor(
+                            annot_handle,
+                            crate::bindgen::FPDFANNOT_COLORTYPE_FPDFANNOT_COLORTYPE_InteriorColor,
+                            0,
+                            0,
+                            0,
+                            0,
+                        );
+
+                        // 3. If we STILL don't have a color, try one more time after appending
+                        // and after setting metadata.
+                        if sync_color.is_none() {
+                            if self.bindings().is_true(self.bindings().FPDFAnnot_GetColor(
+                                annot_handle,
+                                crate::bindgen::FPDFANNOT_COLORTYPE_FPDFANNOT_COLORTYPE_Color,
+                                &mut r,
+                                &mut g,
+                                &mut b,
+                                &mut a,
+                            )) {
+                                sync_color = Some(crate::pdf::color::PdfColor::new(
+                                    r as u8, g as u8, b as u8, a as u8,
+                                ));
+                            }
+                        }
+
+                        // 4. Apply the synced color. If we still don't have one, we'll
+                        // use a fallback but log it clearly.
+                        if let Some(color) = sync_color {
+                            #[cfg(target_arch = "wasm32")]
+                            console::log_1(&format!("   🎨 Applying synced color: r={}, g={}, b={}", color.red(), color.green(), color.blue()).into());
+                            self.set_fill_color(color)?;
+                            self.set_stroke_color(color)?;
+                        } else {
+                            #[cfg(target_arch = "wasm32")]
+                            console::warn_1(&"   ⚠️ Retrieval failed, using default RED".into());
+                            self.set_fill_color(crate::pdf::color::PdfColor::RED)?;
+                            self.set_stroke_color(crate::pdf::color::PdfColor::RED)?;
+                        }
+
+                        // 4. FORCE center the text within the annotation bounds using PAGE coordinates.
+                        let mut annot_rect = crate::bindgen::FS_RECTF {
+                            left: 0.0,
+                            top: 0.0,
+                            right: 0.0,
+                            bottom: 0.0,
+                        };
+                        let mut matrix = crate::bindgen::FS_MATRIX {
+                            a: 0.0,
+                            b: 0.0,
+                            c: 0.0,
+                            d: 0.0,
+                            e: 0.0,
+                            f: 0.0,
+                        };
+
+                        // Get annotation rect and current object matrix
+                        let has_annot_rect = self.bindings().is_true(
+                            self.bindings().FPDFAnnot_GetRect(annot_handle, &mut annot_rect),
+                        );
+                        let has_matrix = self.bindings().is_true(
+                            self.bindings()
+                                .FPDFPageObj_GetMatrix(self.object_handle(), &mut matrix),
+                        );
+
+                        if has_annot_rect && has_matrix {
+                            let annot_width = (annot_rect.right - annot_rect.left).abs();
+                            let annot_height = (annot_rect.top - annot_rect.bottom).abs();
+
+                            // To calculate text size, we temporarily set matrix translation to zero
+                            let original_e = matrix.e;
+                            let original_f = matrix.f;
+                            matrix.e = 0.0;
+                            matrix.f = 0.0;
+                            self.bindings()
+                                .FPDFPageObj_SetMatrix(self.object_handle(), &matrix);
+
+                            if let Ok(bounds) = self.bounds() {
+                                let text_width = bounds.width().value;
+                                let text_height = bounds.height().value;
+
+                                #[cfg(target_arch = "wasm32")]
+                                console::log_1(
+                                    &format!(
+                                        "   📐 Text dimensions: {:.2} x {:.2}",
+                                        text_width, text_height
+                                    )
+                                    .into(),
+                                );
+
+                                // Calculate centered position in LOCAL coordinates
+                                let local_centered_e = (annot_width - text_width) / 2.0;
+                                let local_centered_f = (annot_height - text_height) / 2.0;
+
+                                // Adjust for text's internal offset (bounds.left/bottom when e/f=0)
+                                let offset_e = bounds.left().value;
+                                let offset_f = bounds.bottom().value;
+
+                                // Convert to PAGE coordinates by adding annotation offset
+                                matrix.e = annot_rect.left + local_centered_e - offset_e;
+                                matrix.f = annot_rect.bottom + local_centered_f - offset_f;
+
+                                #[cfg(target_arch = "wasm32")]
+                                console::log_1(
+                                    &format!(
+                                        "   🎯 Centered page coords: e={:.2}, f={:.2}",
+                                        matrix.e, matrix.f
+                                    )
+                                    .into(),
+                                );
+                            } else {
+                                #[cfg(target_arch = "wasm32")]
+                                console::warn_1(&"   ⚠️ Could not calculate text bounds, falling back to offset only".into());
+                                // Fallback to just adding offset if bounds calculation fails
+                                matrix.e = original_e + annot_rect.left;
+                                matrix.f = original_f + annot_rect.bottom;
+                            }
+
+                            self.bindings()
+                                .FPDFPageObj_SetMatrix(self.object_handle(), &matrix);
+                        }
+
+                        // 5. Nudge the annotation's RECTANGLE to force resource synchronization
+                        if self.bindings().is_true(
+                            self.bindings().FPDFAnnot_GetRect(annot_handle, &mut annot_rect),
+                        ) {
+                            annot_rect.left += 0.0001;
+                            self.bindings().FPDFAnnot_SetRect(annot_handle, &annot_rect);
+                            annot_rect.left -= 0.0001;
+                            self.bindings().FPDFAnnot_SetRect(annot_handle, &annot_rect);
+                        }
+
+                        // 6. Final update call to generate the stream content
+                        self.bindings()
+                            .FPDFAnnot_UpdateObject(annot_handle, self.object_handle());
+
+                        // 7. Set the /AS key to /N
+                        self.bindings()
+                            .FPDFAnnot_SetStringValue_str(annot_handle, "AS", "N");
+
+                        // 8. Clear alternative appearance modes
+                        self.bindings()
+                            .FPDFAnnot_SetAP(annot_handle, 1, std::ptr::null_mut()); // RollOver
+                        self.bindings()
+                            .FPDFAnnot_SetAP(annot_handle, 2, std::ptr::null_mut()); // Down
+
+                        self.regenerate_content_after_mutation()
+                    } else {
+                        Err(PdfiumError::PdfiumLibraryInternalError(
+                            PdfiumInternalError::Unknown,
+                        ))
+                    }
+                } else {
+                    // Standard (non-stamp) annotation logic
+                    if self
+                        .bindings()
+                        .is_true(self.bindings().FPDFAnnot_AppendObject(
+                            annot_handle,
+                            self.object_handle(),
+                        ))
+                    {
+                        self.set_ownership(PdfPageObjectOwnership::owned_by_attached_annotation(
+                            ownership.document_handle(),
+                            ownership.page_handle(),
+                            annot_handle,
+                        ));
+                        self.regenerate_content_after_mutation()
+                    } else {
+                        Err(PdfiumError::PdfiumLibraryInternalError(
+                            PdfiumInternalError::Unknown,
+                        ))
+                    }
+                }
+            }
+            PdfPageObjectOwnership::UnattachedAnnotation(ownership) => {
+                if self
+                    .bindings()
+                    .is_true(self.bindings().FPDFAnnot_AppendObject(
+                        ownership.annotation_handle(),
+                        self.object_handle(),
+                    ))
+                {
+                    self.set_ownership(PdfPageObjectOwnership::owned_by_unattached_annotation(
+                        ownership.document_handle(),
+                        ownership.annotation_handle(),
+                    ));
+                    self.regenerate_content_after_mutation()
+                } else {
+                    Err(PdfiumError::PdfiumLibraryInternalError(
+                        PdfiumInternalError::Unknown,
+                    ))
+                }
+            }
+            _ => Err(PdfiumError::OwnershipNotAttachedToAnnotation),
+        }
+    }
+
     #[inline]
     fn is_copyable_impl(&self) -> bool {
         true

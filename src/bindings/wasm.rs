@@ -7612,8 +7612,6 @@ impl PdfiumLibraryBindings for WasmPdfiumBindings {
 
         let state = PdfiumRenderWasmState::lock();
 
-        let len = size_of::<FS_POINTF>();
-
         let ptr_start = state.copy_struct_to_pdfium(start);
         let ptr_end = state.copy_struct_to_pdfium(end);
 
