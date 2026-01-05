@@ -4142,7 +4142,7 @@ pub const FPDFANNOT_COLORTYPE_FPDFANNOT_COLORTYPE_Color: FPDFANNOT_COLORTYPE = 0
 pub const FPDFANNOT_COLORTYPE_FPDFANNOT_COLORTYPE_InteriorColor: FPDFANNOT_COLORTYPE = 1;
 pub type FPDFANNOT_COLORTYPE = ::std::os::raw::c_uint;
 unsafe extern "C" {
-    #[doc = " Experimental API.\n Check if an annotation subtype is currently supported for creation.\n Currently supported subtypes:\n    - circle\n    - fileattachment\n    - freetext\n    - highlight\n    - ink\n    - link\n    - popup\n    - square,\n    - squiggly\n    - stamp\n    - strikeout\n    - text\n    - underline\n\n   subtype   - the subtype to be checked.\n\n Returns true if this subtype supported."]
+    #[doc = " Experimental API.\n Check if an annotation subtype is currently supported for creation.\n Currently supported subtypes:\n    - caret\n    - circle\n    - fileattachment\n    - freetext\n    - highlight\n    - ink\n    - line\n    - link\n    - polygon\n    - polyline\n    - popup\n    - square\n    - squiggly\n    - stamp\n    - strikeout\n    - text\n    - underline\n    - watermark\n\n   subtype   - the subtype to be checked.\n\n Returns true if this subtype supported."]
     pub fn FPDFAnnot_IsSupportedSubtype(subtype: FPDF_ANNOTATION_SUBTYPE) -> FPDF_BOOL;
 }
 unsafe extern "C" {
@@ -4150,23 +4150,6 @@ unsafe extern "C" {
     pub fn FPDFPage_CreateAnnot(
         page: FPDF_PAGE,
         subtype: FPDF_ANNOTATION_SUBTYPE,
-    ) -> FPDF_ANNOTATION;
-}
-unsafe extern "C" {
-    #[doc = " Experimental API.\n Create a widget annotation (form field annotation) in |page|.\n This creates both the form field dictionary and the widget annotation,\n properly linking them together.\n\n   page              - Handle to the page.\n   form_handle       - Handle to the form fill module (required).\n   field_name        - The field name (/T key), encoded in UTF-8.\n   field_type        - The field type (/FT key): \"Tx\" (text), \"Btn\" (button),\n                       \"Ch\" (choice), or \"Sig\" (signature).\n   rect              - Bounding rectangle for the widget annotation.\n   field_flags       - The /Ff (field flags) value. Use to specify button\n                       subtypes (checkbox/radio/push button), choice subtypes\n                       (combo/list), and other field attributes. Use 0 for\n                       default behavior.\n   options           - Array of option strings for choice fields (NULL to skip).\n   option_count      - Number of options (0 if options is NULL).\n   max_length        - Maximum length for text fields (-1 to skip).\n   quadding          - Text alignment: 0=left, 1=center, 2=right (-1 to skip).\n   default_appearance - Default appearance string, e.g. \"/Helv 12 Tf 0 0 0 rg\"\n                        (NULL to skip).\n   default_value     - Default value string, UTF-16LE encoded (NULL to skip).\n\n Returns a handle to the created widget annotation, or NULL on failure.\n Must call FPDFPage_CloseAnnot() when done."]
-    pub fn FPDFPage_CreateWidgetAnnot(
-        page: FPDF_PAGE,
-        form_handle: FPDF_FORMHANDLE,
-        field_name: FPDF_BYTESTRING,
-        field_type: FPDF_BYTESTRING,
-        rect: *const FS_RECTF,
-        field_flags: ::std::os::raw::c_int,
-        options: *const *const FPDF_WCHAR,
-        option_count: usize,
-        max_length: ::std::os::raw::c_int,
-        quadding: ::std::os::raw::c_int,
-        default_appearance: FPDF_BYTESTRING,
-        default_value: FPDF_WIDESTRING,
     ) -> FPDF_ANNOTATION;
 }
 unsafe extern "C" {
@@ -4189,6 +4172,27 @@ unsafe extern "C" {
 unsafe extern "C" {
     #[doc = " Experimental API.\n Remove the annotation in |page| at |index|.\n\n   page  - handle to a page.\n   index - the index of the annotation.\n\n Returns true if successful."]
     pub fn FPDFPage_RemoveAnnot(page: FPDF_PAGE, index: ::std::os::raw::c_int) -> FPDF_BOOL;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Ensure the document has an /AcroForm dictionary in its catalog.\n Creates one if it doesn't exist.\n\n   document - Handle to the document.\n\n Returns TRUE if AcroForm exists or was successfully created, FALSE otherwise."]
+    pub fn FPDF_EnsureAcroForm(document: FPDF_DOCUMENT) -> FPDF_BOOL;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Create a widget annotation (form field annotation) in |page|.\n This creates both the form field dictionary and the widget annotation,\n properly linking them together.\n\n   page               - Handle to the page.\n   form_handle        - Handle to the form fill module (required).\n   field_name         - The field name (/T key), encoded in UTF-8.\n   field_type         - The field type (/FT key): \"Tx\" (text), \"Btn\" (button),\n                        \"Ch\" (choice), or \"Sig\" (signature).\n   rect               - Bounding rectangle for the widget annotation.\n   field_flags        - Field flags (/Ff key). Use FPDF_FORMFLAG_* constants.\n                        For buttons: use FPDF_FORMFLAG_BTN_RADIO for radio\n                        buttons, FPDF_FORMFLAG_BTN_PUSHBUTTON for push buttons,\n                        or 0 for checkboxes.\n   options            - Optional: array of option strings for choice fields\n                        (NULL to skip). Each string is UTF-16LE encoded.\n   option_count       - Number of options in the array (0 to skip).\n   max_length         - Optional: max text length for text fields (-1 to skip).\n   quadding           - Optional: text alignment (-1 to skip).\n                        0=left, 1=center, 2=right.\n   default_appearance - Optional: default appearance string for variable text\n                        fields (NULL to skip). Format: \"/FontName Size Tf\".\n   default_value      - Optional: default value for form reset (NULL to skip).\n                        UTF-16LE encoded.\n\n Returns a handle to the created widget annotation, or NULL on failure.\n Must call FPDFPage_CloseAnnot() when done."]
+    pub fn FPDFPage_CreateWidgetAnnot(
+        page: FPDF_PAGE,
+        form_handle: FPDF_FORMHANDLE,
+        field_name: FPDF_BYTESTRING,
+        field_type: FPDF_BYTESTRING,
+        rect: *const FS_RECTF,
+        field_flags: ::std::os::raw::c_int,
+        options: *const *const FPDF_WCHAR,
+        option_count: usize,
+        max_length: ::std::os::raw::c_int,
+        quadding: ::std::os::raw::c_int,
+        default_appearance: FPDF_BYTESTRING,
+        default_value: FPDF_WIDESTRING,
+    ) -> FPDF_ANNOTATION;
 }
 unsafe extern "C" {
     #[doc = " Experimental API.\n Get the subtype of an annotation.\n\n   annot  - handle to an annotation.\n\n Returns the annotation subtype."]
@@ -4306,7 +4310,7 @@ unsafe extern "C" {
     ) -> ::std::os::raw::c_ulong;
 }
 unsafe extern "C" {
-    #[doc = " Experimental API.\n Set the vertices of a polyline or polygon annotation.\n Sets the /Vertices dictionary entry to [v0.x, v0.y, v1.x, v1.y, ...].\n\n   annot    - handle to an annotation.\n   vertices - array of points (must not be NULL).\n   count    - number of points in the array (must be > 0).\n\n Returns the number of points set if successful, 0 otherwise."]
+    #[doc = " Experimental API.\n Set the vertices of a polyline or polygon annotation.\n\n   annot    - handle to an annotation, as returned by e.g. FPDFPage_GetAnnot()\n   vertices - array of points defining the path (must not be NULL)\n   count    - number of points in the vertices array (must be > 0)\n\n Returns the number of points set if the annotation is of type polyline or\n polygon, |vertices| is not NULL, |count| > 0, and setting the /Vertices\n dictionary entry succeeds. Returns 0 on failure.\n\n This function sets the /Vertices entry in the annotation dictionary to an\n array [v0.x, v0.y, v1.x, v1.y, ...] where v0, v1, etc. are the points in\n the vertices array. The appearance stream (/AP) is not automatically\n updated; callers must rebuild it separately if needed.\n\n For polygon annotations, the path should be closed (first and last points\n should typically be the same, or the viewer will close it automatically).\n For polyline annotations, the path remains open."]
     pub fn FPDFAnnot_SetVertices(
         annot: FPDF_ANNOTATION,
         vertices: *const FS_POINTF,
@@ -4335,7 +4339,7 @@ unsafe extern "C" {
     ) -> FPDF_BOOL;
 }
 unsafe extern "C" {
-    #[doc = " Experimental API.\n Set the starting and ending coordinates of a line annotation.\n Sets the /L dictionary entry to [start.x, start.y, end.x, end.y].\n\n   annot  - handle to an annotation.\n   start  - starting point (must not be NULL).\n   end    - ending point (must not be NULL).\n\n Returns true if successful."]
+    #[doc = " Experimental API.\n Set the starting and ending coordinates of a line annotation.\n\n   annot  - handle to an annotation, as returned by e.g. FPDFPage_GetAnnot()\n   start  - starting point (must not be NULL)\n   end    - ending point (must not be NULL)\n\n Returns true if the annotation is of type line, |start| and |end| are not\n NULL, and setting the /L dictionary entry succeeds, false otherwise.\n\n This function sets the /L entry in the annotation dictionary to an array\n [start.x, start.y, end.x, end.y]. The appearance stream (/AP) is not\n automatically updated; callers must rebuild it separately if needed."]
     pub fn FPDFAnnot_SetLine(
         annot: FPDF_ANNOTATION,
         start: *const FS_POINTF,
@@ -4361,15 +4365,15 @@ unsafe extern "C" {
     ) -> FPDF_BOOL;
 }
 unsafe extern "C" {
-    #[doc = " Experimental API.\n Get the border width from /BS/W.\n\n   annot  - handle to an annotation\n   width  - pointer to receive the border width value\n\n Returns true if width is not NULL and the border width was successfully retrieved."]
+    #[doc = " Experimental API.\n Get the width value from the annotation's /BS (Border Style) dictionary.\n\n   annot  - handle to an annotation.\n   width  - receives the width value, must not be NULL.\n\n Returns true if /BS dictionary exists and /W key is present, false otherwise."]
     pub fn FPDFAnnot_GetBSWidth(annot: FPDF_ANNOTATION, width: *mut f32) -> FPDF_BOOL;
 }
 unsafe extern "C" {
-    #[doc = " Experimental API.\n Set the border width in /BS/W.\n\n   annot  - handle to an annotation\n   width  - border width value (must be >= 0.0)\n\n Returns true if setting the border width succeeds, false otherwise."]
+    #[doc = " Experimental API.\n Set the width value in the annotation's /BS (Border Style) dictionary.\n\n   annot  - handle to an annotation.\n   width  - the width value to be set, in default user space units.\n\n Returns true if successful, false otherwise. Creates /BS dictionary if it\n doesn't exist. Rejects negative width values."]
     pub fn FPDFAnnot_SetBSWidth(annot: FPDF_ANNOTATION, width: f32) -> FPDF_BOOL;
 }
 unsafe extern "C" {
-    #[doc = " Experimental API.\n Get the border style from /BS/S.\n\n   annot   - handle to an annotation\n   buffer  - buffer to receive the style string (e.g., \"S\", \"D\", \"B\", \"I\", \"U\")\n   buflen  - size of the buffer\n\n Returns the length of the style string (including null terminator) if successful, 0 otherwise."]
+    #[doc = " Experimental API.\n Get the style name from the annotation's /BS (Border Style) dictionary.\n |buffer| is only modified if |buflen| is large enough to hold the style name.\n If |buflen| is smaller, the total size is still returned, but nothing is\n copied. If /BS dictionary doesn't exist or /S key is missing, an empty string\n is written to |buffer| and 1 is returned (for null terminator). On other\n errors, nothing is written to |buffer| and 0 is returned.\n\n   annot  - handle to an annotation.\n   buffer - buffer for holding the style name, as a null-terminated byte string.\n            Valid values are \"S\" (solid), \"D\" (dashed), \"B\" (beveled), \"I\"\n            (inset), or \"U\" (underline).\n   buflen - length of the buffer in bytes.\n\n Returns the length of the style name in bytes, including the null terminator."]
     pub fn FPDFAnnot_GetBSStyle(
         annot: FPDF_ANNOTATION,
         buffer: *mut ::std::os::raw::c_char,
@@ -4377,11 +4381,11 @@ unsafe extern "C" {
     ) -> ::std::os::raw::c_ulong;
 }
 unsafe extern "C" {
-    #[doc = " Experimental API.\n Set the border style in /BS/S.\n\n   annot  - handle to an annotation\n   style  - border style string (e.g., \"S\" for solid, \"D\" for dashed, \"B\" for beveled, \"I\" for inset, \"U\" for underline)\n\n Returns true if setting the border style succeeds, false otherwise."]
+    #[doc = " Experimental API.\n Set the style name in the annotation's /BS (Border Style) dictionary.\n\n   annot  - handle to an annotation.\n   style  - the style name to be set, encoded as a byte string. Must be one of:\n            \"S\" (solid), \"D\" (dashed), \"B\" (beveled), \"I\" (inset), or \"U\"\n            (underline).\n\n Returns true if successful, false otherwise. Creates /BS dictionary if it\n doesn't exist. Rejects invalid style names."]
     pub fn FPDFAnnot_SetBSStyle(annot: FPDF_ANNOTATION, style: FPDF_BYTESTRING) -> FPDF_BOOL;
 }
 unsafe extern "C" {
-    #[doc = " Experimental API.\n Get the dash pattern from /BS/D.\n\n   annot  - handle to an annotation\n   dash   - pointer to receive the dash length value\n   gap    - pointer to receive the gap length value\n   phase  - pointer to receive the phase value\n\n Returns true if dash, gap, and phase are not NULL and the dash pattern was successfully retrieved."]
+    #[doc = " Experimental API.\n Get the dash pattern array from the annotation's /BS (Border Style)\n dictionary.\n\n   annot  - handle to an annotation.\n   dash   - receives the dash value, must not be NULL.\n   gap    - receives the gap value, must not be NULL.\n   phase  - receives the phase value, must not be NULL.\n\n Returns true if /BS dictionary exists, /D key is present, and array has at\n least 3 elements, false otherwise."]
     pub fn FPDFAnnot_GetBSDash(
         annot: FPDF_ANNOTATION,
         dash: *mut f32,
@@ -4390,7 +4394,7 @@ unsafe extern "C" {
     ) -> FPDF_BOOL;
 }
 unsafe extern "C" {
-    #[doc = " Experimental API.\n Set the dash pattern in /BS/D.\n\n   annot  - handle to an annotation\n   dash   - dash length value (must be >= 0.0)\n   gap    - gap length value (must be >= 0.0)\n   phase  - phase value (must be >= 0.0)\n\n Returns true if setting the dash pattern succeeds, false otherwise."]
+    #[doc = " Experimental API.\n Set the dash pattern array in the annotation's /BS (Border Style) dictionary.\n\n   annot  - handle to an annotation.\n   dash   - the dash value, in default user space units.\n   gap    - the gap value, in default user space units.\n   phase  - the phase value, in default user space units.\n\n Returns true if successful, false otherwise. Creates /BS dictionary and /D\n array if they don't exist. Rejects negative values."]
     pub fn FPDFAnnot_SetBSDash(
         annot: FPDF_ANNOTATION,
         dash: f32,
@@ -4440,6 +4444,14 @@ unsafe extern "C" {
         annot: FPDF_ANNOTATION,
         key: FPDF_BYTESTRING,
         value: *mut f32,
+    ) -> FPDF_BOOL;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Set the float value corresponding to |key| in |annot|'s dictionary,\n overwriting the existing value if any. The value type would be\n FPDF_OBJECT_NUMBER after this function call succeeds.\n\n   annot  - handle to an annotation.\n   key    - the key to the dictionary entry to be set, encoded in UTF-8.\n   value  - the float value to be set.\n\n Returns true if successful."]
+    pub fn FPDFAnnot_SetNumberValue(
+        annot: FPDF_ANNOTATION,
+        key: FPDF_BYTESTRING,
+        value: f32,
     ) -> FPDF_BOOL;
 }
 unsafe extern "C" {
@@ -4557,6 +4569,55 @@ unsafe extern "C" {
     ) -> FPDF_BOOL;
 }
 unsafe extern "C" {
+    #[doc = " Experimental API.\n Set options array for combo box or list box widget annotation.\n Simple format - each string is both the display label and export value.\n\n   hHandle      - handle to the form fill module.\n   annot        - handle to an interactive form annotation.\n   options      - array of null-terminated UTF-16LE option strings.\n   option_count - number of options in the array.\n\n Returns true on success."]
+    pub fn FPDFAnnot_SetFormFieldOptionArray(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        options: *const *const FPDF_WCHAR,
+        option_count: usize,
+    ) -> FPDF_BOOL;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Set options array with separate export values and display labels.\n Export value format - each option has a value (stored) and label (displayed).\n\n   hHandle        - handle to the form fill module.\n   annot          - handle to an interactive form annotation.\n   export_values  - array of null-terminated UTF-16LE export value strings.\n   display_labels - array of null-terminated UTF-16LE display label strings.\n   option_count   - number of options in both arrays.\n\n Returns true on success."]
+    pub fn FPDFAnnot_SetFormFieldOptionArrayWithExportValues(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        export_values: *const *const FPDF_WCHAR,
+        display_labels: *const *const FPDF_WCHAR,
+        option_count: usize,
+    ) -> FPDF_BOOL;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Set the maximum text length for a text field widget annotation.\n\n   hHandle    - handle to the form fill module.\n   annot      - handle to an interactive form annotation.\n   max_length - maximum number of characters. 0 or negative for unlimited.\n\n Returns true on success."]
+    pub fn FPDFAnnot_SetFormFieldMaxLen(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        max_length: ::std::os::raw::c_int,
+    ) -> FPDF_BOOL;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Get the maximum text length for a text field widget annotation.\n\n   hHandle - handle to the form fill module.\n   annot   - handle to an interactive form annotation.\n\n Returns the maximum length, or -1 on error. 0 means unlimited."]
+    pub fn FPDFAnnot_GetFormFieldMaxLen(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+    ) -> ::std::os::raw::c_int;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Set the text alignment (quadding) for a text field widget annotation.\n\n   hHandle  - handle to the form fill module.\n   annot    - handle to an interactive form annotation.\n   quadding - alignment value: 0=left, 1=center, 2=right.\n\n Returns true on success."]
+    pub fn FPDFAnnot_SetFormFieldQuadding(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        quadding: ::std::os::raw::c_int,
+    ) -> FPDF_BOOL;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Get the text alignment (quadding) for a text field widget annotation.\n\n   hHandle - handle to the form fill module.\n   annot   - handle to an interactive form annotation.\n\n Returns the quadding value (0=left, 1=center, 2=right), or -1 on error."]
+    pub fn FPDFAnnot_GetFormFieldQuadding(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+    ) -> ::std::os::raw::c_int;
+}
+unsafe extern "C" {
     #[doc = " Experimental API.\n Get the float value of the font size for an |annot| with variable text.\n If 0, the font is to be auto-sized: its size is computed as a function of\n the height of the annotation rectangle.\n\n   hHandle - handle to the form fill module, returned by\n             FPDFDOC_InitFormFillEnvironment.\n   annot   - handle to an annotation.\n   value   - Required. Float which will be set to font size on success.\n\n Returns true if the font size was set in |value|, false on error or if\n |value| not provided."]
     pub fn FPDFAnnot_GetFontSize(
         hHandle: FPDF_FORMHANDLE,
@@ -4583,6 +4644,185 @@ unsafe extern "C" {
         G: *mut ::std::os::raw::c_uint,
         B: *mut ::std::os::raw::c_uint,
     ) -> FPDF_BOOL;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Set the normal caption for a button widget annotation (/MK/CA).\n\n   hHandle - handle to the form fill module.\n   annot   - handle to an interactive form annotation.\n   caption - null-terminated UTF-16LE caption string, or NULL to remove.\n\n Returns true on success."]
+    pub fn FPDFAnnot_SetFormFieldMKNormalCaption(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        caption: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Get the normal caption for a button widget annotation (/MK/CA).\n\n   hHandle - handle to the form fill module.\n   annot   - handle to an interactive form annotation.\n   buffer  - buffer for holding the caption string, encoded in UTF-16LE.\n   buflen  - length of the buffer in bytes.\n\n Returns the length of the string value in bytes."]
+    pub fn FPDFAnnot_GetFormFieldMKNormalCaption(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        buffer: *mut FPDF_WCHAR,
+        buflen: ::std::os::raw::c_ulong,
+    ) -> ::std::os::raw::c_ulong;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Set the rollover caption for a button widget annotation (/MK/RC).\n\n   hHandle - handle to the form fill module.\n   annot   - handle to an interactive form annotation.\n   caption - null-terminated UTF-16LE caption string, or NULL to remove.\n\n Returns true on success."]
+    pub fn FPDFAnnot_SetFormFieldMKRolloverCaption(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        caption: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Get the rollover caption for a button widget annotation (/MK/RC).\n\n   hHandle - handle to the form fill module.\n   annot   - handle to an interactive form annotation.\n   buffer  - buffer for holding the caption string, encoded in UTF-16LE.\n   buflen  - length of the buffer in bytes.\n\n Returns the length of the string value in bytes."]
+    pub fn FPDFAnnot_GetFormFieldMKRolloverCaption(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        buffer: *mut FPDF_WCHAR,
+        buflen: ::std::os::raw::c_ulong,
+    ) -> ::std::os::raw::c_ulong;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Set the down caption for a button widget annotation (/MK/AC).\n\n   hHandle - handle to the form fill module.\n   annot   - handle to an interactive form annotation.\n   caption - null-terminated UTF-16LE caption string, or NULL to remove.\n\n Returns true on success."]
+    pub fn FPDFAnnot_SetFormFieldMKDownCaption(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        caption: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Get the down caption for a button widget annotation (/MK/AC).\n\n   hHandle - handle to the form fill module.\n   annot   - handle to an interactive form annotation.\n   buffer  - buffer for holding the caption string, encoded in UTF-16LE.\n   buflen  - length of the buffer in bytes.\n\n Returns the length of the string value in bytes."]
+    pub fn FPDFAnnot_GetFormFieldMKDownCaption(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        buffer: *mut FPDF_WCHAR,
+        buflen: ::std::os::raw::c_ulong,
+    ) -> ::std::os::raw::c_ulong;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Set the border color for a button widget annotation (/MK/BC).\n\n   hHandle         - handle to the form fill module.\n   annot           - handle to an interactive form annotation.\n   color_type      - color type: 0=transparent, 1=Gray, 3=RGB, 4=CMYK.\n   components      - array of color component values (0.0-1.0).\n   component_count - number of components (must match color_type).\n\n Returns true on success."]
+    pub fn FPDFAnnot_SetFormFieldMKBorderColor(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        color_type: ::std::os::raw::c_int,
+        components: *const f32,
+        component_count: usize,
+    ) -> FPDF_BOOL;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Get the border color for a button widget annotation (/MK/BC).\n\n   hHandle         - handle to the form fill module.\n   annot           - handle to an interactive form annotation.\n   color_type      - receives color type: 0=transparent, 1=Gray, 3=RGB, 4=CMYK.\n   components      - buffer for color component values (0.0-1.0).\n   component_count - size of components buffer.\n\n Returns true on success."]
+    pub fn FPDFAnnot_GetFormFieldMKBorderColor(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        color_type: *mut ::std::os::raw::c_int,
+        components: *mut f32,
+        component_count: usize,
+    ) -> FPDF_BOOL;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Set the background color for a button widget annotation (/MK/BG).\n\n   hHandle         - handle to the form fill module.\n   annot           - handle to an interactive form annotation.\n   color_type      - color type: 0=transparent, 1=Gray, 3=RGB, 4=CMYK.\n   components      - array of color component values (0.0-1.0).\n   component_count - number of components (must match color_type).\n\n Returns true on success."]
+    pub fn FPDFAnnot_SetFormFieldMKBackgroundColor(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        color_type: ::std::os::raw::c_int,
+        components: *const f32,
+        component_count: usize,
+    ) -> FPDF_BOOL;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Get the background color for a button widget annotation (/MK/BG).\n\n   hHandle         - handle to the form fill module.\n   annot           - handle to an interactive form annotation.\n   color_type      - receives color type: 0=transparent, 1=Gray, 3=RGB, 4=CMYK.\n   components      - buffer for color component values (0.0-1.0).\n   component_count - size of components buffer.\n\n Returns true on success."]
+    pub fn FPDFAnnot_GetFormFieldMKBackgroundColor(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        color_type: *mut ::std::os::raw::c_int,
+        components: *mut f32,
+        component_count: usize,
+    ) -> FPDF_BOOL;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Set the rotation for a button widget annotation (/MK/R).\n\n   hHandle  - handle to the form fill module.\n   annot    - handle to an interactive form annotation.\n   rotation - rotation in degrees (0, 90, 180, or 270).\n\n Returns true on success."]
+    pub fn FPDFAnnot_SetFormFieldMKRotation(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        rotation: ::std::os::raw::c_int,
+    ) -> FPDF_BOOL;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Get the rotation for a button widget annotation (/MK/R).\n\n   hHandle - handle to the form fill module.\n   annot   - handle to an interactive form annotation.\n\n Returns the rotation in degrees (0, 90, 180, or 270), or -1 on error."]
+    pub fn FPDFAnnot_GetFormFieldMKRotation(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+    ) -> ::std::os::raw::c_int;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Set the text position relative to icon for a button widget annotation (/MK/TP).\n\n   hHandle  - handle to the form fill module.\n   annot    - handle to an interactive form annotation.\n   position - text position (0-6): 0=caption only, 1=icon only,\n              2=caption below, 3=caption above, 4=caption right,\n              5=caption left, 6=caption overlaid.\n\n Returns true on success."]
+    pub fn FPDFAnnot_SetFormFieldMKTextPosition(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        position: ::std::os::raw::c_int,
+    ) -> FPDF_BOOL;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Get the text position relative to icon for a button widget annotation (/MK/TP).\n\n   hHandle - handle to the form fill module.\n   annot   - handle to an interactive form annotation.\n\n Returns the text position (0-6), or -1 on error."]
+    pub fn FPDFAnnot_GetFormFieldMKTextPosition(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+    ) -> ::std::os::raw::c_int;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Set the icon fit parameters for a button widget annotation (/MK/IF).\n\n   hHandle         - handle to the form fill module.\n   annot           - handle to an interactive form annotation.\n   scale_when      - when to scale: 0=always, 1=bigger, 2=smaller, 3=never.\n   scale_type      - how to scale: 0=anamorphic, 1=proportional.\n   left_position   - horizontal position (0.0=left, 0.5=center, 1.0=right).\n   bottom_position - vertical position (0.0=bottom, 0.5=center, 1.0=top).\n   fit_bounds      - true to scale to annotation bounds.\n\n Returns true on success."]
+    pub fn FPDFAnnot_SetFormFieldMKIconFit(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        scale_when: ::std::os::raw::c_int,
+        scale_type: ::std::os::raw::c_int,
+        left_position: f32,
+        bottom_position: f32,
+        fit_bounds: FPDF_BOOL,
+    ) -> FPDF_BOOL;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Get the icon fit parameters for a button widget annotation (/MK/IF).\n\n   hHandle         - handle to the form fill module.\n   annot           - handle to an interactive form annotation.\n   scale_when      - receives when to scale (0-3).\n   scale_type      - receives how to scale (0-1).\n   left_position   - receives horizontal position.\n   bottom_position - receives vertical position.\n   fit_bounds      - receives fit bounds flag.\n\n Returns true on success."]
+    pub fn FPDFAnnot_GetFormFieldMKIconFit(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        scale_when: *mut ::std::os::raw::c_int,
+        scale_type: *mut ::std::os::raw::c_int,
+        left_position: *mut f32,
+        bottom_position: *mut f32,
+        fit_bounds: *mut FPDF_BOOL,
+    ) -> FPDF_BOOL;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Set the default appearance string for a variable text widget annotation.\n The DA string specifies font, size, and color for text rendering.\n Format: \"/FontName Size Tf R G B rg\" (e.g., \"/Helv 12 Tf 0 0 0 rg\")\n\n   hHandle   - handle to the form fill module.\n   annot     - handle to an interactive form annotation.\n   da_string - null-terminated default appearance string, or NULL to remove.\n\n Returns true on success."]
+    pub fn FPDFAnnot_SetFormFieldDefaultAppearance(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        da_string: FPDF_BYTESTRING,
+    ) -> FPDF_BOOL;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Get the default appearance string for a variable text widget annotation.\n\n   hHandle - handle to the form fill module.\n   annot   - handle to an interactive form annotation.\n   buffer  - buffer for holding the string, encoded in UTF-8.\n   buflen  - length of the buffer in bytes.\n\n Returns the length of the string value in bytes (including null terminator)."]
+    pub fn FPDFAnnot_GetFormFieldDefaultAppearance(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        buffer: *mut ::std::os::raw::c_char,
+        buflen: ::std::os::raw::c_ulong,
+    ) -> ::std::os::raw::c_ulong;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Set the default value for a widget annotation.\n This value is used when the form is reset.\n\n   hHandle - handle to the form fill module.\n   annot   - handle to an interactive form annotation.\n   value   - null-terminated UTF-16LE default value string, or NULL to remove.\n\n Returns true on success."]
+    pub fn FPDFAnnot_SetFormFieldDefaultValue(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        value: FPDF_WIDESTRING,
+    ) -> FPDF_BOOL;
+}
+unsafe extern "C" {
+    #[doc = " Experimental API.\n Get the default value for a widget annotation.\n\n   hHandle - handle to the form fill module.\n   annot   - handle to an interactive form annotation.\n   buffer  - buffer for holding the value string, encoded in UTF-16LE.\n   buflen  - length of the buffer in bytes.\n\n Returns the length of the string value in bytes."]
+    pub fn FPDFAnnot_GetFormFieldDefaultValue(
+        hHandle: FPDF_FORMHANDLE,
+        annot: FPDF_ANNOTATION,
+        buffer: *mut FPDF_WCHAR,
+        buflen: ::std::os::raw::c_ulong,
+    ) -> ::std::os::raw::c_ulong;
 }
 unsafe extern "C" {
     #[doc = " Experimental API.\n Determine if |annot| is a form widget that is checked. Intended for use with\n checkbox and radio button widgets.\n\n   hHandle - handle to the form fill module, returned by\n             FPDFDOC_InitFormFillEnvironment.\n   annot   - handle to an annotation.\n\n Returns true if |annot| is a form widget and is checked, false otherwise."]

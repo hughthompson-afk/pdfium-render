@@ -574,7 +574,7 @@ impl<'a> PdfPageAnnotationAttachmentPoints<'a> {
         };
         
         // CRITICAL: For highlight annotations, always use fixed 0.3 opacity
-        // Set /ca BEFORE generating appearance stream so PDFium can create Resources dictionary
+        // Set /ca and /CA BEFORE generating appearance stream so PDFium can create Resources dictionary
         // when it processes the appearance stream
         if annotation_type == PdfPageAnnotationType::Highlight {
             let alpha = 0.3; // Fixed opacity for all highlights
@@ -582,22 +582,23 @@ impl<'a> PdfPageAnnotationAttachmentPoints<'a> {
             {
                 use web_sys::console;
                 console::log_1(&"═══════════════════════════════════════════════════════════".into());
-                console::log_1(&"🔧 SETTING /ca to 0.3 for highlight annotation".into());
+                console::log_1(&"🔧 SETTING /ca and /CA to 0.3 for highlight annotation".into());
                 console::log_1(&format!("   Setting fill opacity (/ca) to: {:.4}", alpha).into());
             }
-            let _opacity_result = self.bindings.FPDFAnnot_SetNumberValue(
+            let _ = self.bindings.FPDFAnnot_SetNumberValue(
                 self.annotation_handle,
                 "ca",
+                alpha,
+            );
+            let _ = self.bindings.FPDFAnnot_SetNumberValue(
+                self.annotation_handle,
+                "CA",
                 alpha,
             );
             #[cfg(target_arch = "wasm32")]
             {
                 use web_sys::console;
-                if self.bindings.is_true(_opacity_result) {
-                    console::log_1(&format!("   ✅ Fill opacity (/ca) set successfully: {:.4}", alpha).into());
-                } else {
-                    console::log_1(&format!("   ⚠️  Failed to set fill opacity (/ca): {:.4}", alpha).into());
-                }
+                console::log_1(&format!("   ✅ Fill opacity (/ca, /CA) set to: {:.4}", alpha).into());
             }
         }
 

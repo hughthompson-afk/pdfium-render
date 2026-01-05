@@ -327,9 +327,10 @@ impl<'a> PdfPageObject<'a> {
         ownership: PdfPageObjectOwnership,
         bindings: &'a dyn PdfiumLibraryBindings,
     ) -> Self {
-        match PdfPageObjectType::from_pdfium(bindings.FPDFPageObj_GetType(object_handle) as u32)
-            .unwrap_or(PdfPageObjectType::Unsupported)
-        {
+        let object_type = PdfPageObjectType::from_pdfium(bindings.FPDFPageObj_GetType(object_handle) as u32)
+            .unwrap_or(PdfPageObjectType::Unsupported);
+
+        match object_type {
             PdfPageObjectType::Unsupported => PdfPageObject::Unsupported(
                 PdfPageUnsupportedObject::from_pdfium(object_handle, ownership, bindings),
             ),
@@ -687,7 +688,10 @@ pub trait PdfPageObjectCommon<'a> {
     ///
     /// Any translation, rotation, scaling, or skewing transformations currently applied to the
     /// given [PdfPageObject] will be immediately applied to this [PdfPageObject].
-    fn transform_from(&mut self, other: &PdfPageObject) -> Result<(), PdfiumError>;
+    fn transform_from(&mut self, other: &PdfPageObject<'a>) -> Result<(), PdfiumError>;
+
+    /// Returns the internal `FPDF_PAGEOBJECT` handle for this [PdfPageObject].
+    fn page_object_handle(&self) -> crate::bindgen::FPDF_PAGEOBJECT;
 
     /// Sets the blend mode that will be applied when painting this [PdfPageObject].
     ///
@@ -891,6 +895,11 @@ impl<'a, T> PdfPageObjectCommon<'a> for T
 where
     T: PdfPageObjectPrivate<'a>,
 {
+    #[inline]
+    fn page_object_handle(&self) -> crate::bindgen::FPDF_PAGEOBJECT {
+        self.object_handle()
+    }
+
     #[inline]
     fn has_transparency(&self) -> bool {
         self.has_transparency_impl()

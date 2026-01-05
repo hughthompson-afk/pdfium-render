@@ -27,3 +27,5 @@ form-test-page-*.jpg
 
 *.code-workspace
 .history/
+
+.env

@@ -671,6 +671,16 @@ where
         &mut self,
         index: PdfPageObjectIndex,
     ) -> Result<PdfPageObject<'a>, PdfiumError> {
+        // #region agent log
+        #[cfg(target_arch = "wasm32")]
+        crate::utils::agent_log(
+            "src/pdf/document/page/objects/common.rs:674",
+            "REMOVE OBJECT AT INDEX START",
+            &format!("{{\"index\":{}}}", index),
+            "H3"
+        );
+        // #endregion
+
         if index >= self.len() {
             return Err(PdfiumError::PageObjectIndexOutOfBounds);
         }

@@ -1,9 +1,9 @@
 //! Defines the [PdfAttachment] struct, exposing functionality related to a single
 //! attachment in a `PdfAttachments` collection.
 
-use crate::bindgen::{FPDF_ATTACHMENT, FPDF_WCHAR};
+use crate::bindgen::{FPDF_ATTACHMENT, FPDF_DOCUMENT, FPDF_WCHAR};
 use crate::bindings::PdfiumLibraryBindings;
-use crate::error::PdfiumError;
+use crate::error::{PdfiumError, PdfiumInternalError};
 use crate::utils::mem::create_byte_buffer;
 use crate::utils::utf16le::get_string_from_pdfium_utf16le_bytes;
 use std::io::Write;
@@ -110,6 +110,22 @@ impl<'a> PdfAttachment<'a> {
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    /// Sets the byte data for this [PdfAttachment].
+    pub fn set_data(&mut self, document_handle: FPDF_DOCUMENT, bytes: &[u8]) -> Result<(), PdfiumError> {
+        if self.bindings().is_true(self.bindings().FPDFAttachment_SetFile(
+            self.handle,
+            document_handle,
+            bytes.as_ptr() as *const c_void,
+            bytes.len() as c_ulong,
+        )) {
+            Ok(())
+        } else {
+            Err(PdfiumError::PdfiumLibraryInternalError(
+                PdfiumInternalError::Unknown,
+            ))
+        }
     }
 
     /// Writes this [PdfAttachment] to a new byte buffer, returning the byte buffer.

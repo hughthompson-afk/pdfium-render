@@ -10,6 +10,7 @@ use crate::pdf::document::page::annotation::objects::PdfPageAnnotationObjects;
 use crate::pdf::document::page::annotation::private::internal::PdfPageAnnotationPrivate;
 use crate::pdf::document::page::object::ownership::PdfPageObjectOwnership;
 use crate::pdf::document::page::objects::private::internal::PdfPageObjectsPrivate;
+use std::os::raw::{c_ulong, c_void};
 
 #[cfg(doc)]
 use crate::pdf::document::page::annotation::{PdfPageAnnotation, PdfPageAnnotationType};
@@ -17,6 +18,7 @@ use crate::pdf::document::page::annotation::{PdfPageAnnotation, PdfPageAnnotatio
 /// A single [PdfPageAnnotation] of type [PdfPageAnnotationType::FileAttachment].
 pub struct PdfPageFileAttachmentAnnotation<'a> {
     handle: FPDF_ANNOTATION,
+    document_handle: FPDF_DOCUMENT,
     objects: PdfPageAnnotationObjects<'a>,
     attachment_points: PdfPageAnnotationAttachmentPoints<'a>,
     bindings: &'a dyn PdfiumLibraryBindings,
@@ -31,6 +33,7 @@ impl<'a> PdfPageFileAttachmentAnnotation<'a> {
     ) -> Self {
         PdfPageFileAttachmentAnnotation {
             handle: annotation_handle,
+            document_handle,
             objects: PdfPageAnnotationObjects::from_pdfium(
                 document_handle,
                 page_handle,
@@ -71,6 +74,60 @@ impl<'a> PdfPageFileAttachmentAnnotation<'a> {
             ))
         } else {
             Ok(PdfAttachment::from_pdfium(attachment_handle, self.bindings))
+        }
+    }
+
+    /// Sets the byte data for the file attachment associated with this annotation.
+    ///
+    /// Returns an error if this annotation has no file attachment associated with it.
+    pub fn set_attachment_data(&mut self, bytes: &[u8]) -> Result<(), PdfiumError> {
+        let attachment_handle = self.bindings.FPDFAnnot_GetFileAttachment(self.handle);
+
+        if attachment_handle.is_null() {
+            Err(PdfiumError::NoDataInAttachment)
+        } else if self.bindings.is_true(self.bindings.FPDFAttachment_SetFile(
+            attachment_handle,
+            self.document_handle,
+            bytes.as_ptr() as *const c_void,
+            bytes.len() as c_ulong,
+        )) {
+            Ok(())
+        } else {
+            Err(PdfiumError::PdfiumLibraryInternalError(
+                PdfiumInternalError::Unknown,
+            ))
+        }
+    }
+
+    /// Sets the byte data for the file attachment associated with this annotation,
+    /// creating a new file attachment with the given name if one does not already exist.
+    pub fn set_attachment_data_with_name(
+        &mut self,
+        name: &str,
+        bytes: &[u8],
+    ) -> Result<(), PdfiumError> {
+        let mut attachment_handle = self.bindings.FPDFAnnot_GetFileAttachment(self.handle);
+
+        if attachment_handle.is_null() {
+            // Create the attachment object if it doesn't exist.
+            attachment_handle = self.bindings.FPDFAnnot_AddFileAttachment_str(self.handle, name);
+        }
+
+        if attachment_handle.is_null() {
+            return Err(PdfiumError::NoDataInAttachment);
+        }
+
+        if self.bindings.is_true(self.bindings.FPDFAttachment_SetFile(
+            attachment_handle,
+            self.document_handle,
+            bytes.as_ptr() as *const c_void,
+            bytes.len() as c_ulong,
+        )) {
+            Ok(())
+        } else {
+            Err(PdfiumError::PdfiumLibraryInternalError(
+                PdfiumInternalError::Unknown,
+            ))
         }
     }
 

@@ -277,8 +277,18 @@ impl<'a> PdfPageTextObject<'a> {
 
     /// Returns the [PdfFont] used to render the text contained within this [PdfPageTextObject].
     pub fn font(&self) -> PdfFont<'_> {
+        let handle = self.bindings().FPDFTextObj_GetFont(self.object_handle);
+        // #region agent log
+        #[cfg(target_arch = "wasm32")]
+        crate::utils::agent_log(
+            "src/pdf/document/page/object/text.rs:282",
+            "GET OBJECT FONT",
+            &format!("{{\"object_handle\":\"{:?}\",\"font_handle\":\"{:?}\"}}", self.object_handle, handle),
+            "H2"
+        );
+        // #endregion
         PdfFont::from_pdfium(
-            self.bindings().FPDFTextObj_GetFont(self.object_handle),
+            handle,
             self.bindings(),
             None,
             false,

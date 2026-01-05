@@ -125,6 +125,33 @@ impl<'a> PdfPageWatermarkAnnotation<'a> {
             }
         }
 
+        // Get fill color to check for transparency
+        let mut r: u32 = 128;
+        let mut g: u32 = 128;
+        let mut b: u32 = 128;
+        let mut a: u32 = 128;
+        let fill_color = if self.bindings.is_true(self.bindings.FPDFAnnot_GetColor(
+            self.handle,
+            FPDFANNOT_COLORTYPE_FPDFANNOT_COLORTYPE_Color,
+            &mut r,
+            &mut g,
+            &mut b,
+            &mut a,
+        )) {
+            PdfColor::new(r as u8, g as u8, b as u8, a as u8)
+        } else {
+            PdfColor::new(128, 128, 128, 128) // Semi-transparent gray
+        };
+
+        let alpha = fill_color.alpha() as f32 / 255.0;
+
+        // CRITICAL: Set /ca and /CA BEFORE calling FPDFAnnot_SetAP_str so PDFium can create
+        // the Resources dictionary when it processes the appearance stream.
+        if alpha < 1.0 {
+            let _ = self.bindings.FPDFAnnot_SetNumberValue(self.handle, "ca", alpha);
+            let _ = self.bindings.FPDFAnnot_SetNumberValue(self.handle, "CA", alpha);
+        }
+
         let content_stream = self.build_watermark_appearance_stream(rotation_degrees, scale)?;
 
         let result = self.bindings.FPDFAnnot_SetAP_str(
@@ -274,6 +301,13 @@ impl<'a> PdfPageWatermarkAnnotation<'a> {
 
         // Save graphics state
         stream.push_str("q\n");
+
+        // Apply ExtGState with opacity if alpha < 1.0
+        // PDFium will map /GS to the /ca value we set on the annotation earlier.
+        let alpha = fill_color.alpha() as f32 / 255.0;
+        if alpha < 1.0 {
+            stream.push_str("/GS gs\n");
+        }
 
         // Translate to annotation's bottom-left corner
         stream.push_str(&format!("1 0 0 1 {:.4} {:.4} cm\n", left, bottom));

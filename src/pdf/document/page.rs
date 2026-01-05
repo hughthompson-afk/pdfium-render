@@ -33,6 +33,8 @@ use crate::pdf::document::page::annotations::PdfPageAnnotations;
 use crate::pdf::document::page::boundaries::PdfPageBoundaries;
 use crate::pdf::document::page::index_cache::PdfPageIndexCache;
 use crate::pdf::document::page::links::PdfPageLinks;
+#[cfg(target_arch = "wasm32")]
+use crate::pdf::document::page::object::private::internal::PdfPageObjectPrivate;
 use crate::pdf::document::page::objects::common::PdfPageObjectsCommon;
 use crate::pdf::document::page::objects::PdfPageObjects;
 use crate::pdf::document::page::render_config::{PdfPageRenderSettings, PdfRenderConfig};
@@ -959,7 +961,7 @@ impl<'a> PdfPage<'a> {
     // Use a custom-written flatten operation, rather than Pdfium's built-in flatten. See:
     // https://github.com/ajrcarey/pdfium-render/issues/140
     pub fn flatten(&mut self) -> Result<(), PdfiumError> {
-        flatten_page(self.handle())
+        flatten::flatten(self.page_handle)
     }
 
     /// Flattens all annotations and form fields on this [PdfPage] into the page contents.

@@ -8353,10 +8353,6 @@ impl PdfiumLibraryBindings for WasmPdfiumBindings {
 
         let key_ptr = state.copy_bytes_to_pdfium(&c_key.into_bytes_with_nul());
 
-        let value_bytes = value.to_le_bytes();
-        let value_ptr = state.malloc(size_of::<c_float>());
-        state.copy_bytes_to_pdfium_address(&value_bytes, value_ptr);
-
         // Try to call the function, but handle gracefully if it doesn't exist
         let result = match state.try_call(
             "FPDFAnnot_SetNumberValue",
@@ -8364,12 +8360,12 @@ impl PdfiumLibraryBindings for WasmPdfiumBindings {
             Some(vec![
                 JsFunctionArgumentType::Pointer,
                 JsFunctionArgumentType::Pointer,
-                JsFunctionArgumentType::Pointer,
+                JsFunctionArgumentType::Number,
             ]),
             Some(&JsValue::from(Array::of3(
                 &Self::js_value_from_annotation(annot),
                 &Self::js_value_from_offset(key_ptr),
-                &Self::js_value_from_offset(value_ptr),
+                &JsValue::from_f64(value as f64),
             ))),
         ) {
             Ok(js_result) => {
@@ -8377,7 +8373,6 @@ impl PdfiumLibraryBindings for WasmPdfiumBindings {
                     Some(v) => v as FPDF_BOOL,
                     None => {
                         log::warn!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetNumberValue(): function returned invalid result");
-                        state.free(value_ptr);
                         state.free(key_ptr);
                         return 0; // Return false
                     }
@@ -8385,13 +8380,11 @@ impl PdfiumLibraryBindings for WasmPdfiumBindings {
             }
             Err(_) => {
                 log::warn!("pdfium-render::PdfiumLibraryBindings::FPDFAnnot_SetNumberValue(): function FPDFAnnot_SetNumberValue is not available in this PDFium build, opacity setting will be skipped");
-                state.free(value_ptr);
                 state.free(key_ptr);
                 return 0; // Return false
             }
         };
 
-        state.free(value_ptr);
         state.free(key_ptr);
 
         result

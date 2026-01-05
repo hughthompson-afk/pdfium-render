@@ -225,44 +225,42 @@ impl<'a> PdfPageHighlightAnnotation<'a> {
         }
 
         let content_stream = content_stream_result?;
-        let alpha = fill_color.alpha() as f32 / 255.0;
+        // For highlight annotations, always use 0.3 opacity (standard PDF highlight opacity)
+        let alpha = 0.3;
 
-        // CRITICAL: Set /ca BEFORE calling FPDFAnnot_SetAP_str so PDFium can create Resources dictionary
+        // CRITICAL: Set /ca and /CA BEFORE calling FPDFAnnot_SetAP_str so PDFium can create Resources dictionary
         // when it processes the appearance stream
-        if alpha < 1.0 {
+        {
             #[cfg(target_arch = "wasm32")]
             {
                 use web_sys::console;
                 console::log_1(&"═══════════════════════════════════════════════════════════".into());
-                console::log_1(&"🔧 SETTING /ca BEFORE FPDFAnnot_SetAP_str (alpha < 1.0)".into());
+                console::log_1(&"🔧 SETTING /ca and /CA BEFORE FPDFAnnot_SetAP_str (alpha < 1.0)".into());
                 console::log_1(&format!("   Setting fill opacity (/ca) to: {:.4}", alpha).into());
             }
-            let _opacity_result = self.bindings.FPDFAnnot_SetNumberValue(
+            let _ = self.bindings.FPDFAnnot_SetNumberValue(
                 self.handle,
                 "ca",
+                alpha,
+            );
+            let _ = self.bindings.FPDFAnnot_SetNumberValue(
+                self.handle,
+                "CA",
                 alpha,
             );
             #[cfg(target_arch = "wasm32")]
             {
                 use web_sys::console;
-                if self.bindings.is_true(_opacity_result) {
-                    console::log_1(&format!("   ✅ Fill opacity (/ca) set successfully: {:.4}", alpha).into());
-                    
-                    // Verify /ca was set correctly by reading it back
-                    let mut ca_value: f32 = 0.0;
-                    let has_ca = self.bindings.FPDFAnnot_HasKey(self.handle, "ca");
-                    if self.bindings.is_true(has_ca) {
-                        let get_ca_result = self.bindings.FPDFAnnot_GetNumberValue(self.handle, "ca", &mut ca_value);
-                        if self.bindings.is_true(get_ca_result) {
-                            console::log_1(&format!("   ✅ Verified /ca value: {:.4} (matches expected: {:.4})", ca_value, alpha).into());
-                        } else {
-                            console::log_1(&"   ⚠️  Could not read back /ca value".into());
-                        }
-                    } else {
-                        console::log_1(&"   ⚠️  /ca key not found after setting".into());
+                console::log_1(&format!("   ✅ Fill opacity (/ca, /CA) set to: {:.4}", alpha).into());
+                
+                // Verify /ca was set correctly by reading it back
+                let mut ca_value: f32 = 0.0;
+                let has_ca = self.bindings.FPDFAnnot_HasKey(self.handle, "ca");
+                if self.bindings.is_true(has_ca) {
+                    let get_ca_result = self.bindings.FPDFAnnot_GetNumberValue(self.handle, "ca", &mut ca_value);
+                    if self.bindings.is_true(get_ca_result) {
+                        console::log_1(&format!("   ✅ Verified /ca value: {:.4} (matches expected: {:.4})", ca_value, alpha).into());
                     }
-                } else {
-                    console::log_1(&format!("   ⚠️  Failed to set fill opacity (/ca): {:.4}", alpha).into());
                 }
             }
         }
@@ -288,50 +286,6 @@ impl<'a> PdfPageHighlightAnnotation<'a> {
         }
 
         if self.bindings.is_true(result) {
-            // Verify the appearance stream after setting it
-            #[cfg(target_arch = "wasm32")]
-            {
-                use web_sys::console;
-                console::log_1(&"═══════════════════════════════════════════════════════════".into());
-                console::log_1(&"🔍 VERIFYING APPEARANCE STREAM AFTER SetAP".into());
-                
-                // Get the appearance stream back to verify it contains /GS gs
-                let ap_len = self.bindings.FPDFAnnot_GetAP(
-                    self.handle,
-                    mode.as_pdfium(),
-                    std::ptr::null_mut(),
-                    0,
-                );
-                if ap_len > 2 {
-                    let mut buffer = vec![0u16; (ap_len / 2) as usize];
-                    let read_result = self.bindings.FPDFAnnot_GetAP(
-                        self.handle,
-                        mode.as_pdfium(),
-                        buffer.as_mut_ptr() as *mut crate::bindgen::FPDF_WCHAR,
-                        ap_len,
-                    );
-                    if read_result == ap_len {
-                        if let Ok(ap_content) = String::from_utf16(&buffer[..buffer.len().saturating_sub(1)]) {
-                            console::log_1(&format!("   Appearance stream length: {} bytes", ap_content.len()).into());
-                            console::log_1(&format!("   Contains '/GS gs': {}", ap_content.contains("/GS gs")).into());
-                            console::log_1(&format!("   Contains '/GS1 gs': {}", ap_content.contains("/GS1 gs")).into());
-                            
-                            // Check for Resources dictionary (may be in stream object, not content)
-                            // FPDFAnnot_GetAP only returns content stream, not full stream object
-                            console::log_1(&"   ⚠️  Note: FPDFAnnot_GetAP returns content stream only, not Resources dictionary".into());
-                            console::log_1(&"   ⚠️  Resources/ExtGState/GS must be set separately (not accessible via GetAP)".into());
-                            
-                            let preview = if ap_content.len() > 300 {
-                                format!("{}...", &ap_content[..300])
-                            } else {
-                                ap_content.clone()
-                            };
-                            console::log_1(&format!("   Content preview:\n{}", preview).into());
-                        }
-                    }
-                }
-            }
-
             // Set Appearance State (/AS) to match the mode
             let mode_str = match mode {
                 PdfAppearanceMode::Normal => "/N",
@@ -352,16 +306,14 @@ impl<'a> PdfPageHighlightAnnotation<'a> {
             #[cfg(target_arch = "wasm32")]
             {
                 use web_sys::console;
-                if alpha < 1.0 {
-                    console::log_1(&"═══════════════════════════════════════════════════════════".into());
-                    console::log_1(&"⚠️  CRITICAL: ExtGState Resources Dictionary".into());
-                    console::log_1(&format!("   /ca is set to: {:.4} (alpha < 1.0)", alpha).into());
-                    console::log_1(&"   Content stream references: /GS gs".into());
-                    console::log_1(&format!("   Required: Resources/ExtGState/GS/ca = {:.4}", alpha).into());
-                    console::log_1(&"   ⚠️  FPDFAnnot_SetAP_str only sets content stream, not Resources dictionary".into());
-                    console::log_1(&"   ⚠️  Resources must be set via low-level PDF object manipulation".into());
-                    console::log_1(&"═══════════════════════════════════════════════════════════".into());
-                }
+                console::log_1(&"═══════════════════════════════════════════════════════════".into());
+                console::log_1(&"⚠️  CRITICAL: ExtGState Resources Dictionary".into());
+                console::log_1(&format!("   /ca is set to: {:.4} (highlight opacity)", alpha).into());
+                console::log_1(&"   Content stream references: /GS gs".into());
+                console::log_1(&format!("   Required: Resources/ExtGState/GS/ca = {:.4}", alpha).into());
+                console::log_1(&"   ⚠️  FPDFAnnot_SetAP_str only sets content stream, not Resources dictionary".into());
+                console::log_1(&"   ⚠️  Resources must be set via low-level PDF object manipulation".into());
+                console::log_1(&"═══════════════════════════════════════════════════════════".into());
             }
 
             #[cfg(target_arch = "wasm32")]
@@ -397,7 +349,8 @@ impl<'a> PdfPageHighlightAnnotation<'a> {
     ) -> Result<String, PdfiumError> {
         let left = rect.left;
         let bottom = rect.bottom;
-        let alpha = fill_color.alpha() as f32 / 255.0;
+        // For highlight annotations, always use 0.3 opacity (standard PDF highlight opacity)
+        let alpha = 0.3;
 
         #[cfg(target_arch = "wasm32")]
         {

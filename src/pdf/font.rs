@@ -826,11 +826,23 @@ impl<'a> PdfFont<'a> {
 
         assert_eq!(result, buffer_length);
 
-        String::from_utf8(buffer)
+        let font_name = String::from_utf8(buffer)
             // Trim any trailing nulls. All strings returned from Pdfium are generally terminated
             // by one null byte.
             .map(|str| str.trim_end_matches(char::from(0)).to_owned())
-            .unwrap_or_else(|_| String::new())
+            .unwrap_or_else(|_| String::new());
+
+        // #region agent log
+        #[cfg(target_arch = "wasm32")]
+        crate::utils::agent_log(
+            "src/pdf/font.rs",
+            "FONT NAME CHECK",
+            &format!("{{\"handle\":\"{:?}\",\"name\":\"{}\"}}", self.handle, font_name),
+            "H2"
+        );
+        // #endregion
+
+        font_name
     }
 
     /// Returns the family of this [PdfFont].
@@ -928,11 +940,23 @@ impl<'a> PdfFont<'a> {
 
         assert_eq!(result, buffer_length);
 
-        String::from_utf8(buffer)
+        let font_name = String::from_utf8(buffer)
             // Trim any trailing nulls. All strings returned from Pdfium are generally terminated
             // by one null byte.
             .map(|str| str.trim_end_matches(char::from(0)).to_owned())
-            .unwrap_or_else(|_| String::new())
+            .unwrap_or_else(|_| String::new());
+
+        // #region agent log
+        #[cfg(target_arch = "wasm32")]
+        crate::utils::agent_log(
+            "src/pdf/font.rs",
+            "FONT NAME CHECK",
+            &format!("{{\"handle\":\"{:?}\",\"name\":\"{}\"}}", self.handle, font_name),
+            "H2"
+        );
+        // #endregion
+
+        font_name
     }
 
     /// Returns the weight of this [PdfFont].

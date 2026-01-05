@@ -562,6 +562,16 @@ impl<'a> PdfFonts<'a> {
         } else {
             let font = PdfFont::from_pdfium(handle, self.bindings, None, true);
 
+            // #region agent log
+            #[cfg(target_arch = "wasm32")]
+            crate::utils::agent_log(
+                "src/pdf/document/fonts.rs:565",
+                "LOAD FONT",
+                &format!("{{\"font_name\":\"{}\",\"font_handle\":\"{:?}\"}}", font.name(), handle),
+                "H2"
+            );
+            // #endregion
+
             let token = PdfFontToken::from_font(&font);
 
             self.fonts.insert(token, font);

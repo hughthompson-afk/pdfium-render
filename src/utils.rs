@@ -637,3 +637,45 @@ mod tests {
         );
     }
 }
+
+// #region agent log
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn agent_log(location: &str, message: &str, data: &str, hypothesis_id: &str) {
+    use wasm_bindgen::JsValue;
+    use web_sys::{Request, RequestInit, RequestMode, window};
+
+    let mut opts = RequestInit::new();
+    opts.set_method("POST");
+    opts.set_mode(RequestMode::Cors);
+
+    // Parse the data string as JSON to avoid double-stringification if it's already a JSON object
+    let data_json: serde_json::Value = if data.is_empty() {
+        serde_json::Value::Null
+    } else {
+        serde_json::from_str(data).unwrap_or(serde_json::Value::String(data.to_string()))
+    };
+
+    let log_entry = serde_json::json!({
+        "location": location,
+        "message": message,
+        "data": data_json,
+        "hypothesisId": hypothesis_id,
+        "timestamp": js_sys::Date::now(),
+        "sessionId": "debug-session"
+    });
+
+    if let Ok(body) = serde_json::to_string(&log_entry) {
+        opts.set_body(&JsValue::from_str(&body));
+
+        if let Some(window) = window() {
+            if let Ok(request) = Request::new_with_str_and_init(
+                "http://127.0.0.1:7242/ingest/cd44253a-10f6-4127-9dca-827d206c807d",
+                &opts
+            ) {
+                let _ = request.headers().set("Content-Type", "application/json");
+                let _ = window.fetch_with_request(&request);
+            }
+        }
+    }
+}
+// #endregion

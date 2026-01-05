@@ -24,15 +24,17 @@ bitflags = "2"
 bytes = "1"
 bytemuck = "1"
 chrono = "0"
-image_025 = { package = "image", version = "0.25", optional = true, default-features = false, features = ["jpeg"]}
-image_024 = { package = "image", version = "0.24", optional = true, default-features = false, features = ["jpeg"]}
-image_023 = { package = "image", version = "0.23", optional = true, default-features = false, features = ["jpeg"]}
+image_025 = { package = "image", version = "0.25", optional = true, default-features = false, features = ["jpeg", "png"]}
+image_024 = { package = "image", version = "0.24", optional = true, default-features = false, features = ["jpeg", "png"]}
+image_023 = { package = "image", version = "0.23", optional = true, default-features = false, features = ["jpeg", "png"]}
 itertools = "0"
 log = "0"
 maybe-owned = "0"
 once_cell = "1"
 utf16string = "0"
 vecmath = "1"
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_log = "1"
@@ -46,6 +48,10 @@ web-sys = { version = "0", features = [
     "Window",
     "Response",
     "Blob",
+    "Request",
+    "RequestInit",
+    "RequestMode",
+    "Headers",
 ] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -66,6 +72,9 @@ axum = "0"                                     # Used by examples/axum_once_cell
 tokio = { version = "1", features = ["full"] } # Used by examples/axum_once_cell.rs
 tower = "0"                                    # Used by examples/axum_once_cell.rs
 pdfium-render = { path = "./", default-features = false, features = ["sync"] } # sync feature required by examples/axum_once_cell.rs
+ureq = { version = "2.9", features = ["json"] }
+base64 = "0.21"
+serde_json = "1.0"
 
 [features]
 default = ["pdfium_latest", "thread_safe", "image"]
@@ -101,14 +110,9 @@ image_api = [] # A feature shared by all image versions, indicating that image-b
 
 pdfium_latest = ["pdfium_7543"]
 pdfium_future = [
-    # For testing changes in Pdfium source control that are yet to be released.
-    # Note: When using pdfium_future, you must build with --no-default-features
-    # to avoid conflicts with pdfium_latest. To get maximum functionality, use:
-    # cargo build --features pdfium_future,thread_safe,image,bindings --no-default-features
-    # Or in your Cargo.toml: pdfium-render = { path = ".", features = ["pdfium_future", "thread_safe", "image", "bindings"], default-features = false }
-    "pdfium_use_skia",
-    "pdfium_enable_xfa",
-    "pdfium_enable_v8",
+    # "pdfium_use_skia",
+    # "pdfium_enable_xfa",
+    # "pdfium_enable_v8",
 ]
 pdfium_7543 = []
 pdfium_7350 = []

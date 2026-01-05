@@ -88,6 +88,15 @@ mod pdf;
 mod pdfium;
 mod utils;
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn initialize_agent_logs() {
+    crate::utils::agent_log("src/lib.rs", "DEBUG SESSION START", "{}", "INIT");
+}
+
 /// A prelude for conveniently importing all public `pdfium-render` definitions at once.
 ///
 /// Usage:
